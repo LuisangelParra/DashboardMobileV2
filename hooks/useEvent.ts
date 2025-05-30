@@ -43,8 +43,11 @@ type RawFeedback = {
   created_at?: string
 }
 
+// Extendemos Event para incluir entryId
+type EventWithEntry = Event & { entryId: string }
+
 export function useEvent(id: string) {
-  const [event, setEvent] = useState<Event | null>(null)
+  const [event, setEvent] = useState<EventWithEntry | null>(null)
   const [speakers, setSpeakers] = useState<Speaker[]>([])
   const [feedback, setFeedback] = useState<Feedback[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -58,15 +61,17 @@ export function useEvent(id: string) {
         // --- 1) Eventos ---
         const resE = await fetch(`${BASE_URL}/data/events/all?format=json`)
         const jsonE = (await resE.json()) as { data: RawRow<RawEvent>[] }
-        const rawEvents = jsonE.data.map(r => r.data)
-
-        // Buscar el rawEvent solicitado
-        const rawEv = rawEvents.find(e => String(e.id) === id)
-        if (!rawEv) {
+        // Encontramos la fila con entry_id
+        const foundRow = jsonE.data.find(r => String(r.data.id) === id)
+        if (!foundRow) {
           setEvent(null)
+          setSpeakers([])
+          setFeedback([])
           setIsLoading(false)
           return
         }
+        const rawEv = foundRow.data
+        const entryId = foundRow.entry_id
 
         // --- 2) Relaciones event_speakers ---
         const resRel = await fetch(
@@ -107,9 +112,7 @@ export function useEvent(id: string) {
         const resF = await fetch(`${BASE_URL}/data/feedbacks/all?format=json`)
         const jsonF = (await resF.json()) as { data: RawRow<RawFeedback>[] }
         const rawFb = jsonF.data.map(r => r.data)
-        // Filtrar solo los de este evento
         const fList = rawFb.filter(f => String(f.event_id) === id)
-        // Mapear al tipo Feedback
         const mappedFb: Feedback[] = fList.map(f => ({
           id: String(f.id),
           eventId: String(f.event_id),
@@ -127,8 +130,9 @@ export function useEvent(id: string) {
             ? fList.reduce((sum, x) => sum + x.rating, 0) / ratingCount
             : 0
 
-        // --- 6) Mapear el Event final con rating ---
-        const mappedEvent: Event = {
+        // --- 6) Mapear el Event final con rating y entryId ---
+        const mappedEvent: EventWithEntry = {
+          entryId,
           id: String(rawEv.id),
           name: rawEv.titulo,
           description: rawEv.descripcion,
@@ -152,9 +156,10 @@ export function useEvent(id: string) {
   }, [id])
 
   const deleteEvent = async () => {
+    if (!event) return false
     try {
       const res = await fetch(
-        `${BASE_URL}/data/events/delete/${id}`,
+        `${BASE_URL}/data/events/delete/${event.entryId}`,
         { method: 'DELETE' }
       )
       return res.ok
