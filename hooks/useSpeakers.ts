@@ -1,91 +1,77 @@
-import { useState, useEffect } from 'react';
-import { Speaker } from '@/types';
+// useSpeakers.ts
+import { useState, useEffect } from 'react'
+import Constants from 'expo-constants'
+import { Speaker } from '@/types'
 
-type SpeakersParams = {
-  search?: string;
-};
+const {
+  UNIDB_BASE_URL,
+  UNIDB_CONTRACT_KEY
+} = (Constants.expoConfig!.extra as {
+  UNIDB_BASE_URL: string
+  UNIDB_CONTRACT_KEY: string
+})
+const BASE_URL = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`
 
-export function useSpeakers(params: SpeakersParams = {}) {
-  const [speakers, setSpeakers] = useState<Speaker[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+type RawRow<T> = { entry_id: string; data: T }
+type RawSpeaker = { id: number; name: string }
+type RawEventSpeaker = { event_id: number; speaker_id: number }
+
+export function useSpeakers(params: { search?: string } = {}) {
+  const [speakers, setSpeakers] = useState<Speaker[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Simulate API call
     const fetchSpeakers = async () => {
+      setIsLoading(true)
       try {
-        // In a real app, this would be an API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Mock data
-        const allSpeakers: Speaker[] = [
-          {
-            id: '1',
-            name: 'Dr. Sarah Johnson',
-            role: 'AI Researcher at TechCorp',
-            bio: 'Leading researcher in artificial intelligence with over 15 years of experience. Specializes in machine learning algorithms and neural networks. Published author with multiple patents in AI technology.',
-            eventCount: 3,
-            rating: 4.9,
-          },
-          {
-            id: '2',
-            name: 'Michael Chen',
-            role: 'Senior Developer at WebFuture',
-            bio: 'Full-stack developer specializing in modern web frameworks and performance optimization. Has led development teams for several high-traffic web applications and contributes to open-source projects.',
-            eventCount: 2,
-            rating: 4.7,
-          },
-          {
-            id: '3',
-            name: 'Jessica Williams',
-            role: 'UX Design Director',
-            bio: 'Award-winning designer focused on creating intuitive and accessible user experiences. Previously worked with major tech companies and now consults for startups and established businesses alike.',
-            eventCount: 4,
-            rating: 4.8,
-          },
-          {
-            id: '4',
-            name: 'Robert Martinez',
-            role: 'CTO at StartupHub',
-            bio: 'Technology leader with expertise in scaling infrastructure and building engineering teams. Has successfully guided multiple startups through rapid growth phases and technology transformations.',
-            eventCount: 1,
-            rating: 4.6,
-          },
-          {
-            id: '5',
-            name: 'Emma Davis',
-            role: 'Cybersecurity Expert',
-            bio: 'Specializing in application security and ethical hacking. Helps organizations identify vulnerabilities and implement robust security practices. Regular speaker at security conferences.',
-            eventCount: 2,
-            rating: 4.5,
-          },
-        ];
-        
-        // Apply filters
-        let filteredSpeakers = [...allSpeakers];
-        
-        if (params.search) {
-          const searchTerm = params.search.toLowerCase();
-          filteredSpeakers = filteredSpeakers.filter(
-            speaker => 
-              speaker.name.toLowerCase().includes(searchTerm) ||
-              speaker.role.toLowerCase().includes(searchTerm) ||
-              speaker.bio.toLowerCase().includes(searchTerm)
-          );
+        // all speakers
+        const resS = await fetch(
+          `${BASE_URL}/data/speakers/all?format=json`
+        )
+        const { data: rawS } = (await resS.json()) as {
+          data: RawRow<RawSpeaker>[]
         }
-        
-        setSpeakers(filteredSpeakers);
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error fetching speakers:', error);
-        setIsLoading(false);
+        const base = rawS.map(r => r.data)
+
+        // puente para contar eventos
+        const resRel = await fetch(
+          `${BASE_URL}/data/event_speakers/all?format=json`
+        )
+        const { data: rawRel } = (await resRel.json()) as {
+          data: RawRow<RawEventSpeaker>[]
+        }
+        const rels = rawRel.map(r => r.data)
+
+        // map a tipo Speaker
+        let list: Speaker[] = base.map(s => {
+          const count = rels.filter(r => r.speaker_id === s.id).length
+          return {
+            id: String(s.id),
+            name: s.name,
+            role: '',
+            bio: '',
+            eventCount: count,
+            rating: 0
+          }
+        })
+
+        if (params.search) {
+          const term = params.search.toLowerCase()
+          list = list.filter(
+            s =>
+              s.name.toLowerCase().includes(term)
+          )
+        }
+
+        setSpeakers(list)
+      } catch (err) {
+        console.error('useSpeakers error:', err)
+      } finally {
+        setIsLoading(false)
       }
-    };
+    }
+    fetchSpeakers()
+  }, [params.search])
 
-    fetchSpeakers();
-  }, [params.search]);
-
-  return {
-    speakers,
-    isLoading,
-  };
+  return { speakers, isLoading }
 }

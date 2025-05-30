@@ -1,156 +1,113 @@
-import { useState, useEffect } from 'react';
-import { Feedback, Event } from '@/types';
+// useFeedback.ts
+import { useState, useEffect } from 'react'
+import Constants from 'expo-constants'
+import { Feedback, Event } from '@/types'
 
-type FeedbackParams = {
-  sortBy?: 'date' | 'rating';
-  sortOrder?: 'asc' | 'desc';
-  eventId?: string | null;
-  rating?: number | null;
-};
+const {
+  UNIDB_BASE_URL,
+  UNIDB_CONTRACT_KEY
+} = (Constants.expoConfig!.extra as {
+  UNIDB_BASE_URL: string
+  UNIDB_CONTRACT_KEY: string
+})
+const BASE_URL = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`
 
-export function useFeedback(params: FeedbackParams = {}) {
-  const [feedback, setFeedback] = useState<Feedback[]>([]);
-  const [events, setEvents] = useState<Pick<Event, 'id' | 'name'>[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+type RawRow<T> = { entry_id: string; data: T }
+type RawFeedback = {
+  id: number
+  event_id: number
+  rating: number
+  comment: string
+  created_at?: string
+}
+type RawEvent = { id: number; titulo: string }
+
+export function useFeedback(params: {
+  sortBy?: 'date' | 'rating'
+  sortOrder?: 'asc' | 'desc'
+  eventId?: string | null
+  rating?: number | null
+} = {}) {
+  const [feedback, setFeedback] = useState<Feedback[]>([])
+  const [events, setEvents] = useState<Pick<Event, 'id' | 'name'>[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Simulate API call
     const fetchFeedback = async () => {
+      setIsLoading(true)
       try {
-        // In a real app, this would be an API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Mock data for all feedback
-        const allFeedback: Feedback[] = [
-          {
-            id: '101',
-            eventId: '1',
-            eventName: 'Introduction to AI',
-            rating: 5,
-            comment: 'Excellent workshop! The content was well-structured and easy to follow. I learned a lot about AI fundamentals.',
-            date: 'Jun 15, 2025',
-          },
-          {
-            id: '102',
-            eventId: '1',
-            eventName: 'Introduction to AI',
-            rating: 4,
-            comment: 'Very informative session. Would have liked more hands-on examples, but overall it was great.',
-            date: 'Jun 15, 2025',
-          },
-          {
-            id: '103',
-            eventId: '1',
-            eventName: 'Introduction to AI',
-            rating: 5,
-            comment: 'Dr. Johnson explained complex concepts in a way that was easy to understand. Highly recommend!',
-            date: 'Jun 15, 2025',
-          },
-          {
-            id: '201',
-            eventId: '2',
-            eventName: 'Future of Web Development',
-            rating: 5,
-            comment: 'Michael\'s insights into upcoming web technologies were eye-opening. Great presentation!',
-            date: 'Jun 16, 2025',
-          },
-          {
-            id: '202',
-            eventId: '2',
-            eventName: 'Future of Web Development',
-            rating: 4,
-            comment: 'Fascinating look at where web development is headed. The Q&A session was particularly valuable.',
-            date: 'Jun 16, 2025',
-          },
-          {
-            id: '301',
-            eventId: '3',
-            eventName: 'Networking Mixer',
-            rating: 3,
-            comment: 'Good opportunity to meet other professionals, but the venue was a bit crowded. More structure would have been helpful.',
-            date: 'Jun 16, 2025',
-          },
-          {
-            id: '401',
-            eventId: '4',
-            eventName: 'Mobile App Development Panel',
-            rating: 5,
-            comment: 'The panelists were extremely knowledgeable and addressed important challenges in mobile development.',
-            date: 'Jun 17, 2025',
-          },
-          {
-            id: '402',
-            eventId: '4',
-            eventName: 'Mobile App Development Panel',
-            rating: 4,
-            comment: 'Great discussion and insights from industry experts. Would have liked more time for audience questions.',
-            date: 'Jun 17, 2025',
-          },
-        ];
-        
-        // Mock data for events
-        const allEvents = [
-          { id: '1', name: 'Introduction to AI' },
-          { id: '2', name: 'Future of Web Development' },
-          { id: '3', name: 'Networking Mixer' },
-          { id: '4', name: 'Mobile App Development Panel' },
-          { id: '5', name: 'Cybersecurity Fundamentals' },
-        ];
-        
-        // Set available events
-        setEvents(allEvents);
-        
-        // Apply filters
-        let filteredFeedback = [...allFeedback];
-        
-        if (params.eventId) {
-          filteredFeedback = filteredFeedback.filter(
-            item => item.eventId === params.eventId
-          );
+        // eventos (para nombre)
+        const resE = await fetch(
+          `${BASE_URL}/data/events/all?format=json`
+        )
+        const { data: rawE } = (await resE.json()) as {
+          data: RawRow<RawEvent>[]
         }
-        
-        if (params.rating !== null && params.rating !== undefined) {
-          filteredFeedback = filteredFeedback.filter(
-            item => item.rating === params.rating
-          );
-        }
-        
-        // Apply sorting
-        const sortBy = params.sortBy || 'date';
-        const sortOrder = params.sortOrder || 'desc';
-        
-        filteredFeedback.sort((a, b) => {
-          if (sortBy === 'date') {
-            // Sort by date (convert date strings to timestamps)
-            const dateA = new Date(a.date).getTime();
-            const dateB = new Date(b.date).getTime();
-            return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-          } else if (sortBy === 'rating') {
-            // Sort by rating
-            return sortOrder === 'asc' ? a.rating - b.rating : b.rating - a.rating;
-          }
-          return 0;
-        });
-        
-        setFeedback(filteredFeedback);
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error fetching feedback:', error);
-        setIsLoading(false);
-      }
-    };
+        const evMap = rawE.map(r => r.data).reduce(
+          (acc, e) => ((acc[String(e.id)] = e.titulo), acc),
+          {} as Record<string, string>
+        )
+        setEvents(
+          Object.entries(evMap).map(([id, name]) => ({
+            id,
+            name
+          }))
+        )
 
-    fetchFeedback();
+        // feedback
+        const resF = await fetch(
+          `${BASE_URL}/data/feedbacks/all?format=json`
+        )
+        const { data: rawF } = (await resF.json()) as {
+          data: RawRow<RawFeedback>[]
+        }
+        let list = rawF.map(r => {
+          const f = r.data
+          return {
+            id: String(f.id),
+            eventId: String(f.event_id),
+            eventName: evMap[String(f.event_id)] || '',
+            rating: f.rating,
+            comment: f.comment,
+            date: f.created_at || ''
+          }
+        })
+
+        // filtros
+        if (params.eventId) {
+          list = list.filter(f => f.eventId === params.eventId)
+        }
+        if (params.rating != null) {
+          list = list.filter(f => f.rating === params.rating)
+        }
+
+        // orden
+        const sortBy = params.sortBy || 'date'
+        const asc = params.sortOrder === 'asc'
+        list.sort((a, b) => {
+          if (sortBy === 'rating') {
+            return asc ? a.rating - b.rating : b.rating - a.rating
+          }
+          // date
+          return asc
+            ? new Date(a.date).getTime() - new Date(b.date).getTime()
+            : new Date(b.date).getTime() - new Date(a.date).getTime()
+        })
+
+        setFeedback(list)
+      } catch (err) {
+        console.error('useFeedback error:', err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchFeedback()
   }, [
     params.sortBy,
     params.sortOrder,
     params.eventId,
-    params.rating,
-  ]);
+    params.rating
+  ])
 
-  return {
-    feedback,
-    events,
-    isLoading,
-  };
+  return { feedback, events, isLoading }
 }

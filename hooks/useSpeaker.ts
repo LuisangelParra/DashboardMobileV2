@@ -1,129 +1,140 @@
-import { useState, useEffect } from 'react';
-import { Speaker, Event } from '@/types';
+// useSpeaker.ts
+import { useState, useEffect } from 'react'
+import Constants from 'expo-constants'
+import { Speaker, Event } from '@/types'
+
+const {
+  UNIDB_BASE_URL,
+  UNIDB_CONTRACT_KEY
+} = (Constants.expoConfig!.extra as {
+  UNIDB_BASE_URL: string
+  UNIDB_CONTRACT_KEY: string
+})
+const BASE_URL = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`
+
+type RawRow<T> = { entry_id: string; data: T }
+
+type RawSpeaker = {
+  id: number
+  name: string
+}
+
+type RawEventSpeaker = {
+  event_id: number
+  speaker_id: number
+}
+
+type RawEvent = {
+  id: number
+  titulo: string
+  descripcion: string
+  tema: string
+  fecha: string
+  hora_inicio: string
+  hora_fin: string
+  location: string
+  imageUrl: string
+  suscritos: number
+}
 
 export function useSpeaker(id: string) {
-  const [speaker, setSpeaker] = useState<(Speaker & {
-    company?: string;
-    imageUrl?: string;
-    social?: {
-      linkedin?: string;
-      twitter?: string;
-      website?: string;
-    };
-  }) | null>(null);
-  const [events, setEvents] = useState<Event[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [speaker, setSpeaker] = useState<Speaker | null>(null)
+  const [events, setEvents] = useState<Event[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Simulate API call
-    const fetchSpeakerDetails = async () => {
-      try {
-        // In a real app, this would be an API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Mock data for speakers
-        const speakers = [
-          {
-            id: '1',
-            name: 'Dr. Sarah Johnson',
-            role: 'AI Researcher',
-            company: 'TechCorp',
-            bio: 'Leading researcher in artificial intelligence with over 15 years of experience. Specializes in machine learning algorithms and neural networks. Published author with multiple patents in AI technology.',
-            expertise: ['Machine Learning', 'Neural Networks', 'Computer Vision', 'Natural Language Processing'],
-            eventCount: 3,
-            rating: 4.9,
-            imageUrl: 'https://images.pexels.com/photos/3796217/pexels-photo-3796217.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-            social: {
-              linkedin: 'https://linkedin.com/in/sarahjohnson',
-              twitter: 'https://twitter.com/drsarah',
-              website: 'https://sarahjohnson.ai',
-            },
-          },
-          {
-            id: '2',
-            name: 'Michael Chen',
-            role: 'Senior Developer',
-            company: 'WebFuture',
-            bio: 'Full-stack developer specializing in modern web frameworks and performance optimization. Has led development teams for several high-traffic web applications and contributes to open-source projects.',
-            expertise: ['React', 'Node.js', 'GraphQL', 'Performance Optimization'],
-            eventCount: 2,
-            rating: 4.7,
-            imageUrl: 'https://images.pexels.com/photos/2379005/pexels-photo-2379005.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-            social: {
-              linkedin: 'https://linkedin.com/in/michaelchen',
-              github: 'https://github.com/mchen',
-              website: 'https://michaelchen.dev',
-            },
-          },
-        ];
-        
-        // Find the requested speaker
-        const foundSpeaker = speakers.find(s => s.id === id) || null;
-        
-        if (foundSpeaker) {
-          setSpeaker(foundSpeaker);
-          
-          // Mock events for this speaker
-          if (id === '1') {
-            setEvents([
-              {
-                id: '1',
-                name: 'Introduction to AI',
-                description: 'Learn the basics of artificial intelligence and machine learning in this introductory workshop.',
-                category: 'Workshop',
-                date: 'Jun 15, 2025',
-                time: '10:00 AM - 12:00 PM',
-                location: 'Main Hall',
-                imageUrl: 'https://images.pexels.com/photos/8386440/pexels-photo-8386440.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-                rating: 4.8,
-                ratingCount: 24,
-              },
-              {
-                id: '5',
-                name: 'Future of AI Panel',
-                description: 'Industry experts discuss the latest trends and future directions in artificial intelligence.',
-                category: 'Panel',
-                date: 'Jun 17, 2025',
-                time: '2:00 PM - 3:30 PM',
-                location: 'Room 101',
-                imageUrl: 'https://images.pexels.com/photos/8566472/pexels-photo-8566472.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-                rating: 4.6,
-                ratingCount: 15,
-              },
-            ]);
-          } else if (id === '2') {
-            setEvents([
-              {
-                id: '2',
-                name: 'Future of Web Development',
-                description: 'Explore the latest trends and technologies shaping the future of web development.',
-                category: 'Presentation',
-                date: 'Jun 16, 2025',
-                time: '2:00 PM - 3:30 PM',
-                location: 'Room 101',
-                imageUrl: 'https://images.pexels.com/photos/574071/pexels-photo-574071.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-                rating: 4.5,
-                ratingCount: 18,
-              },
-            ]);
-          }
-        }
-        
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error fetching speaker details:', error);
-        setIsLoading(false);
-      }
-    };
-
-    if (id) {
-      fetchSpeakerDetails();
+    if (!id) {
+      setIsLoading(false)
+      return
     }
-  }, [id]);
 
-  return {
-    speaker,
-    events,
-    isLoading,
-  };
+    const fetchSpeakerDetails = async () => {
+      setIsLoading(true)
+      try {
+        // 1) Traigo todos los speakers
+        const resS = await fetch(`${BASE_URL}/data/speakers/all?format=json`)
+        const jsonS: any = await resS.json()
+        const rawS: RawRow<RawSpeaker>[] = Array.isArray(jsonS?.data)
+          ? jsonS.data
+          : []
+
+        // Busco el speaker
+        const found = rawS.map(r => r.data).find(r => String(r.id) === id)
+        if (!found) {
+          setSpeaker(null)
+          setEvents([])
+          setIsLoading(false)
+          return
+        }
+        setSpeaker({
+          id: String(found.id),
+          name: found.name,
+          role: '',
+          bio: '',
+          eventCount: 0,
+          rating: 0
+        })
+
+        // 2) Traigo relaciones event_speakers
+        const resRel = await fetch(
+          `${BASE_URL}/data/event_speakers/all?format=json`
+        )
+        const jsonRel: any = await resRel.json()
+        const rawRel: RawRow<RawEventSpeaker>[] = Array.isArray(jsonRel?.data)
+          ? jsonRel.data
+          : []
+        
+        // Eliminar duplicados usando Set
+        const eventIds = [...new Set(
+          rawRel
+            .map(r => r.data)
+            .filter(r => String(r.speaker_id) === id)
+            .map(r => r.event_id)
+        )]
+
+        // 3) Traigo todos los events
+        const resE = await fetch(`${BASE_URL}/data/events/all?format=json`)
+        const jsonE: any = await resE.json()
+        const rawE: RawRow<RawEvent>[] = Array.isArray(jsonE?.data)
+          ? jsonE.data
+          : []
+
+        // 4) Crear un Map para evitar eventos duplicados por ID
+        const eventMap = new Map<number, Event>()
+        
+        rawE
+          .map(r => r.data)
+          .filter(e => eventIds.includes(e.id))
+          .forEach(e => {
+            if (!eventMap.has(e.id)) {
+              eventMap.set(e.id, {
+                id: String(e.id),
+                name: e.titulo,
+                description: e.descripcion,
+                category: e.tema as any,
+                date: e.fecha,
+                time: `${e.hora_inicio} - ${e.hora_fin}`,
+                location: e.location,
+                imageUrl: e.imageUrl,
+                rating: 0,
+                ratingCount: e.suscritos
+              })
+            }
+          })
+        
+        const myEvents: Event[] = Array.from(eventMap.values())
+        setEvents(myEvents)
+      } catch (err) {
+        console.error('useSpeaker error:', err)
+        setSpeaker(null)
+        setEvents([])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchSpeakerDetails()
+  }, [id])
+
+  return { speaker, events, isLoading }
 }

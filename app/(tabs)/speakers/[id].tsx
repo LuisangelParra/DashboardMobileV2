@@ -12,6 +12,9 @@ export default function SpeakerDetailScreen() {
   const isDark = colorScheme === 'dark';
   
   const { speaker, events, isLoading } = useSpeaker(id);
+  
+  // Protección contra arrays undefined/null
+  const safeEvents = events || [];
 
   if (isLoading) {
     return (
@@ -86,6 +89,7 @@ export default function SpeakerDetailScreen() {
           </Pressable>
         </View>
 
+        {/* Protección para imageUrl que puede no existir */}
         {speaker.imageUrl ? (
           <Image
             source={{ uri: speaker.imageUrl }}
@@ -117,9 +121,10 @@ export default function SpeakerDetailScreen() {
           styles.role,
           { color: isDark ? '#EBEBF5' : '#3C3C43' }
         ]}>
-          {speaker.role}
+          {speaker.role || 'Speaker'}
         </Text>
         
+        {/* company puede no existir en tu tipo Speaker */}
         {speaker.company && (
           <Text style={[
             styles.company,
@@ -129,6 +134,7 @@ export default function SpeakerDetailScreen() {
           </Text>
         )}
 
+        {/* social puede no existir en tu tipo Speaker */}
         {speaker.social && (
           <View style={styles.socialLinks}>
             {speaker.social.linkedin && (
@@ -180,7 +186,7 @@ export default function SpeakerDetailScreen() {
             styles.statValue,
             { color: isDark ? '#FFFFFF' : '#000000' }
           ]}>
-            {speaker.eventCount}
+            {safeEvents.length}
           </Text>
           <Text style={[
             styles.statLabel,
@@ -218,7 +224,7 @@ export default function SpeakerDetailScreen() {
             styles.statValue,
             { color: isDark ? '#FFFFFF' : '#000000' }
           ]}>
-            {speaker.expertise.length}
+            {speaker.expertise?.length || 0}
           </Text>
           <Text style={[
             styles.statLabel,
@@ -243,41 +249,45 @@ export default function SpeakerDetailScreen() {
           styles.bio,
           { color: isDark ? '#EBEBF5' : '#3C3C43' }
         ]}>
-          {speaker.bio}
+          {speaker.bio || 'No bio available'}
         </Text>
       </View>
 
-      <View style={[
-        styles.section,
-        { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
-      ]}>
-        <Text style={[
-          styles.sectionTitle,
-          { color: isDark ? '#FFFFFF' : '#000000' }
+      {/* Solo mostrar sección de expertise si existe */}
+      {speaker.expertise && speaker.expertise.length > 0 && (
+        <View style={[
+          styles.section,
+          { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
         ]}>
-          Expertise
-        </Text>
-        <View style={styles.expertiseContainer}>
-          {speaker.expertise.map((skill, index) => (
-            <View
-              key={index}
-              style={[
-                styles.expertiseTag,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
-              ]}
-            >
-              <Text style={[
-                styles.expertiseText,
-                { color: isDark ? '#FFFFFF' : '#000000' }
-              ]}>
-                {skill}
-              </Text>
-            </View>
-          ))}
+          <Text style={[
+            styles.sectionTitle,
+            { color: isDark ? '#FFFFFF' : '#000000' }
+          ]}>
+            Expertise
+          </Text>
+          <View style={styles.expertiseContainer}>
+            {speaker.expertise.map((skill, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.expertiseTag,
+                  { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
+                ]}
+              >
+                <Text style={[
+                  styles.expertiseText,
+                  { color: isDark ? '#FFFFFF' : '#000000' }
+                ]}>
+                  {skill}
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
-      </View>
+      )}
 
-      {events.length > 0 && (
+      {/* Usando safeEvents en lugar de events */}
+      {safeEvents.length > 0 && (
         <View style={[
           styles.section,
           { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
@@ -288,7 +298,7 @@ export default function SpeakerDetailScreen() {
           ]}>
             Events
           </Text>
-          {events.map(event => (
+          {safeEvents.map(event => (
             <Pressable
               key={event.id}
               style={[
