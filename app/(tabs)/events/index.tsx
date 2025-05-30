@@ -89,7 +89,7 @@ export default function EventsScreen() {
         <View style={styles.ratingStars}>
           {[1, 2, 3, 4, 5].map(star => (
             <Text 
-              key={star} 
+              key={`${item.id}-star-${star}`}
               style={[
                 styles.ratingStar,
                 { color: star <= item.rating ? '#FF9500' : isDark ? '#48484A' : '#E5E5EA' }
@@ -209,7 +209,7 @@ export default function EventsScreen() {
         <FlatList
           data={events}
           renderItem={renderEvent}
-          keyExtractor={item => item.id}
+          keyExtractor={(item, index) => `event-${index}-${item.id || 'no-id'}`}
           contentContainerStyle={[
             styles.listContent,
             { paddingBottom: insets.bottom + 20 }
