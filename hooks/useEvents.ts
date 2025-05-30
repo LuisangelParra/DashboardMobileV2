@@ -1,76 +1,132 @@
 // hooks/useEvents.ts
-import Constants from 'expo-constants'
+
 import { useState, useEffect } from 'react'
+import Constants from 'expo-constants'
 import { Event, EventCategory } from '@/types'
 
-const { UNIDB_BASE_URL, UNIDB_CONTRACT_KEY } = Constants.manifest!.extra as Record<string,string>
-const API_BASE = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`
+const {
+  UNIDB_BASE_URL,
+  UNIDB_CONTRACT_KEY
+} = (Constants.expoConfig!.extra as {
+  UNIDB_BASE_URL: string
+  UNIDB_CONTRACT_KEY: string
+})
+const BASE_URL = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`
 
-type EventsParams = {
-  search?: string
-  category?: EventCategory | null
+type RawRow<T> = { entry_id: string; data: T }
+
+type RawEvent = {
+  id: number
+  titulo: string
+  descripcion: string
+  tema: string
+  ponente_id: number
+  fecha: string       // "YYYY-MM-DD"
+  hora_inicio: string // "HH:MM"
+  hora_fin: string    // "HH:MM"
+  max_participantes: number
+  suscritos: number
+  imageUrl: string
 }
 
-export function useEvents(params: EventsParams = {}) {
-  const [events, setEvents]       = useState<Event[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError]         = useState<string | null>(null)
+type RawFeedback = {
+  id: number
+  event_id: number
+  rating: number
+  comment: string
+  created_at?: string
+}
+
+export function useEvents(params: {
+  search?: string
+  category?: EventCategory | null
+} = {}) {
+  const [events, setEvents] = useState<Event[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchAll = async () => {
       setIsLoading(true)
-      setError(null)
       try {
-        // 1) Llamada al API
-        const res = await fetch(
-          `${API_BASE}/data/events/all?format=json`
+        // 1) Leer eventos
+        const resE = await fetch(
+          `${BASE_URL}/data/events/all?format=json`
         )
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const body = await res.json()
-        const raw: { entry_id: string; data: any }[] = body.data
+        const { data: rawE } = (await resE.json()) as {
+          data: RawRow<RawEvent>[]
+        }
 
-        const mapped: Event[] = raw.map(({ entry_id, data }) => ({
-          id:            String(data.id),               // ← usa data.id, no entry_id
-          name:          data.titulo,
-          description:   data.descripcion,
-          category:      (['Workshop','Presentation','Panel','Networking','Other'] as string[])
-                          .includes(data.tema)
-                          ? (data.tema as EventCategory)
-                          : 'Other',
-          date:          data.fecha,
-          time:          data.hora_inicio && data.hora_fin
-                            ? `${data.hora_inicio} - ${data.hora_fin}`
-                            : '',
-          location:      data.lugar  ?? '',
-          imageUrl:      data.imageUrl ?? '',
-          rating:        Number(data.rating)      || 0,
-          ratingCount:   Number(data.ratingCount) || 0,
-        }))
+        // 2) Leer feedbacks
+        const resF = await fetch(
+          `${BASE_URL}/data/feedbacks/all?format=json`
+        )
+        const { data: rawF } = (await resF.json()) as {
+          data: RawRow<RawFeedback>[]
+        }
 
-        // 3) Filtros cliente (search + category)
+        // 3) Agrupar feedbacks por evento
+        const feedbackByEvent: Record<number, RawFeedback[]> = {}
+        rawF.forEach(r => {
+          const fb = r.data
+          if (!feedbackByEvent[fb.event_id]) {
+            feedbackByEvent[fb.event_id] = []
+          }
+          feedbackByEvent[fb.event_id].push(fb)
+        })
+
+        // 4) Mapear a nuestro tipo Event, calculando rating y ratingCount
+        const mapped = rawE.map(r => {
+          const e = r.data
+          const fList = feedbackByEvent[e.id] || []
+          const count = fList.length
+          const avg =
+            count > 0
+              ? fList.reduce((sum, x) => sum + x.rating, 0) / count
+              : 0
+
+          return {
+            id: String(e.id),
+            name: e.titulo,
+            description: e.descripcion,
+            category: e.tema as EventCategory,
+            date: new Date(e.fecha).toLocaleDateString(undefined, {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric'
+            }),
+            time: `${e.hora_inicio} - ${e.hora_fin}`,
+            location: '',                // si no tienes campo 'location' en DB
+            imageUrl: e.imageUrl,
+            rating: avg,
+            ratingCount: count
+          } as Event
+        })
+
+        // 5) Filtrar por search y categoría
         let filtered = mapped
         if (params.search) {
-          const term = params.search.toLowerCase()
-          filtered = filtered.filter(e =>
-            e.name.toLowerCase().includes(term) ||
-            e.description.toLowerCase().includes(term)
+          const q = params.search.toLowerCase()
+          filtered = filtered.filter(ev =>
+            ev.name.toLowerCase().includes(q) ||
+            ev.description.toLowerCase().includes(q)
           )
         }
         if (params.category) {
-          filtered = filtered.filter(e => e.category === params.category)
+          filtered = filtered.filter(
+            ev => ev.category === params.category
+          )
         }
 
         setEvents(filtered)
-      } catch (e: any) {
-        console.error(e)
-        setError(e.message ?? 'Error fetching events')
+      } catch (err) {
+        console.error('useEvents error:', err)
       } finally {
         setIsLoading(false)
       }
     }
 
-    fetchData()
+    fetchAll()
   }, [params.search, params.category])
 
-  return { events, isLoading, error }
+  return { events, isLoading }
 }
