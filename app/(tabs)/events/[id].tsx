@@ -1,5 +1,16 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, Pressable, useColorScheme, ActivityIndicator } from 'react-native';
+// app/(tabs)/events/[id].tsx
+
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Image,
+  Pressable,
+  useColorScheme,
+  ActivityIndicator
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Calendar, Clock, MapPin, CreditCard as Edit2, Trash2, Star, ChevronLeft, Share } from 'lucide-react-native';
@@ -8,6 +19,7 @@ import { CategoryBadge } from '@/components/events/CategoryBadge';
 import { SpeakerRow } from '@/components/speakers/SpeakerRow';
 import { FeedbackCard } from '@/components/feedback/FeedbackCard';
 import { ConfirmationDialog } from '@/components/ui/ConfirmationDialog';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -15,8 +27,30 @@ export default function EventDetailScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
-  
-  const { event, speakers, feedback, isLoading, deleteEvent } = useEvent(id);
+
+  // Ahora useEvent devuelve también `reload`
+  const {
+    event,
+    speakers,
+    feedback,
+    isLoading,
+    deleteEvent,
+    reload: reloadEvent
+  } = useEvent(id);
+
+  // Cada vez que la pantalla toma el foco, recargamos
+  useFocusEffect(
+    useCallback(() => {
+      reloadEvent();
+    }, [id])
+  );
+
+  const handleDeleteEvent = async () => {
+    const ok = await deleteEvent();
+    if (ok) {
+      router.back();
+    }
+  };
 
   if (isLoading) {
     return (
@@ -52,11 +86,6 @@ export default function EventDetailScreen() {
       </View>
     );
   }
-
-  const handleDeleteEvent = async () => {
-    await deleteEvent();
-    router.back();
-  };
 
   return (
     <>

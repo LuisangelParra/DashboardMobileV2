@@ -1,5 +1,5 @@
-// useEvent.ts
-import { useState, useEffect } from 'react'
+// hooks/useEvent.ts
+import { useState, useEffect, useCallback } from 'react'
 import Constants from 'expo-constants'
 import { Event, Speaker, Feedback, EventCategory } from '@/types'
 
@@ -43,77 +43,64 @@ type RawFeedback = {
   created_at?: string
 }
 
-// Extendemos Event para incluir entryId
-type EventWithEntry = Event & { entryId: string }
-
 export function useEvent(id: string) {
-  const [event, setEvent] = useState<EventWithEntry | null>(null)
+  const [event, setEvent] = useState<Event | null>(null)
   const [speakers, setSpeakers] = useState<Speaker[]>([])
   const [feedback, setFeedback] = useState<Feedback[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
+  // Función que realmente hace el fetch y mapea todo
+  const fetchEventDetails = useCallback(async () => {
     if (!id) return
+    setIsLoading(true)
+    try {
+      // --- 1) Leer eventos
+      const resE = await fetch(`${BASE_URL}/data/events/all?format=json`)
+      const { data: rawE } = (await resE.json()) as { data: RawRow<RawEvent>[] }
+      const rawEvents = rawE.map(r => r.data)
+      const rawEv = rawEvents.find(e => String(e.id) === id)
+      if (!rawEv) {
+        setEvent(null)
+        setIsLoading(false)
+        return
+      }
 
-    const fetchEventDetails = async () => {
-      setIsLoading(true)
-      try {
-        // --- 1) Eventos ---
-        const resE = await fetch(`${BASE_URL}/data/events/all?format=json`)
-        const jsonE = (await resE.json()) as { data: RawRow<RawEvent>[] }
-        // Encontramos la fila con entry_id
-        const foundRow = jsonE.data.find(r => String(r.data.id) === id)
-        if (!foundRow) {
-          setEvent(null)
-          setSpeakers([])
-          setFeedback([])
-          setIsLoading(false)
-          return
-        }
-        const rawEv = foundRow.data
-        const entryId = foundRow.entry_id
-
-        // --- 2) Relaciones event_speakers ---
-        const resRel = await fetch(
-          `${BASE_URL}/data/event_speakers/all?format=json`
+      // --- 2) Leer relaciones event_speakers
+      const resRel = await fetch(`${BASE_URL}/data/event_speakers/all?format=json`)
+      const { data: rawRel } = (await resRel.json()) as { data: RawRow<RawEventSpeaker>[] }
+      const rels = rawRel.map(r => r.data)
+      const speakerIds = Array.from(
+        new Set(
+          rels.filter(r => String(r.event_id) === id).map(r => r.speaker_id)
         )
-        const jsonRel = (await resRel.json()) as { data: RawRow<RawEventSpeaker>[] }
-        const rels = jsonRel.data.map(r => r.data)
-        const speakerIds = Array.from(
-          new Set(
-            rels
-              .filter(r => String(r.event_id) === id)
-              .map(r => r.speaker_id)
-          )
-        )
+      )
 
-        // --- 3) Speakers ---
-        const resS = await fetch(`${BASE_URL}/data/speakers/all?format=json`)
-        const jsonS = (await resS.json()) as { data: RawRow<{ id: number; name: string }>[] }
-        const rawSpeakers = jsonS.data.map(r => r.data)
-        const speakerMap = new Map<number, Speaker>()
-        rawSpeakers
-          .filter(s => speakerIds.includes(s.id))
-          .forEach(s => {
-            if (!speakerMap.has(s.id)) {
-              speakerMap.set(s.id, {
-                id: String(s.id),
-                name: s.name,
-                role: '',        // completa si añades más campos
-                bio: '',
-                eventCount: 0,
-                rating: 0
-              })
-            }
+      // --- 3) Leer speakers
+      const resS = await fetch(`${BASE_URL}/data/speakers/all?format=json`)
+      const { data: rawS } = (await resS.json()) as { data: RawRow<{ id: number; name: string }>[] }
+      const rawSpeakers = rawS.map(r => r.data)
+      const speakerMap = new Map<number, Speaker>()
+      rawSpeakers
+        .filter(s => speakerIds.includes(s.id))
+        .forEach(s => {
+          speakerMap.set(s.id, {
+            id: String(s.id),
+            name: s.name,
+            role: '',
+            bio: '',
+            eventCount: 0,
+            rating: 0
           })
-        setSpeakers(Array.from(speakerMap.values()))
+        })
+      setSpeakers(Array.from(speakerMap.values()))
 
-        // --- 4) Feedback ---
-        const resF = await fetch(`${BASE_URL}/data/feedbacks/all?format=json`)
-        const jsonF = (await resF.json()) as { data: RawRow<RawFeedback>[] }
-        const rawFb = jsonF.data.map(r => r.data)
-        const fList = rawFb.filter(f => String(f.event_id) === id)
-        const mappedFb: Feedback[] = fList.map(f => ({
+      // --- 4) Leer feedbacks
+      const resF = await fetch(`${BASE_URL}/data/feedbacks/all?format=json`)
+      const { data: rawF } = (await resF.json()) as { data: RawRow<RawFeedback>[] }
+      const allFb = rawF.map(r => r.data)
+      const fList = allFb.filter(f => String(f.event_id) === id)
+      setFeedback(
+        fList.map(f => ({
           id: String(f.id),
           eventId: String(f.event_id),
           eventName: rawEv.titulo,
@@ -121,52 +108,63 @@ export function useEvent(id: string) {
           comment: f.comment,
           date: f.created_at ?? ''
         }))
-        setFeedback(mappedFb)
+      )
 
-        // --- 5) Calcular rating y ratingCount ---
-        const ratingCount = fList.length
-        const rating =
-          ratingCount > 0
-            ? fList.reduce((sum, x) => sum + x.rating, 0) / ratingCount
-            : 0
+      // --- 5) Calcular rating promedio y conteo
+      const ratingCount = fList.length
+      const rating =
+        ratingCount > 0
+          ? fList.reduce((sum, x) => sum + x.rating, 0) / ratingCount
+          : 0
 
-        // --- 6) Mapear el Event final con rating y entryId ---
-        const mappedEvent: EventWithEntry = {
-          entryId,
-          id: String(rawEv.id),
-          name: rawEv.titulo,
-          description: rawEv.descripcion,
-          category: rawEv.tema as EventCategory,
-          date: rawEv.fecha,
-          time: `${rawEv.hora_inicio} - ${rawEv.hora_fin}`,
-          location: rawEv.location,
-          imageUrl: rawEv.imageUrl,
-          rating,
-          ratingCount
-        }
-        setEvent(mappedEvent)
-      } catch (err) {
-        console.error('useEvent error:', err)
-      } finally {
-        setIsLoading(false)
-      }
+      // --- 6) Mapear Event
+      setEvent({
+        id: String(rawEv.id),
+        name: rawEv.titulo,
+        description: rawEv.descripcion,
+        category: rawEv.tema as EventCategory,
+        date: rawEv.fecha,
+        time: `${rawEv.hora_inicio} - ${rawEv.hora_fin}`,
+        location: rawEv.location,
+        imageUrl: rawEv.imageUrl,
+        rating,
+        ratingCount
+      })
+    } catch (err) {
+      console.error('useEvent error:', err)
+    } finally {
+      setIsLoading(false)
     }
-
-    fetchEventDetails()
   }, [id])
 
-  const deleteEvent = async () => {
-    if (!event) return false
+  // Llamamos a la carga inicial
+  useEffect(() => {
+    fetchEventDetails()
+  }, [fetchEventDetails])
+
+  const deleteEvent = useCallback(async () => {
     try {
-      const res = await fetch(
-        `${BASE_URL}/data/events/delete/${event.entryId}`,
-        { method: 'DELETE' }
-      )
+      // 1) eliminar relaciones event_speakers
+      const relS = await fetch(`${BASE_URL}/data/event_speakers/all?format=json`)
+      const { data: rawRelS } = (await relS.json()) as { data: RawRow<RawEventSpeaker>[] }
+      for (const r of rawRelS.filter(r => String(r.data.event_id) === id)) {
+        await fetch(`${BASE_URL}/data/event_speakers/delete/${r.entry_id}`, { method: 'DELETE' })
+      }
+      // 2) eliminar el evento
+      const res = await fetch(`${BASE_URL}/data/events/delete/${id}`, { method: 'DELETE' })
       return res.ok
     } catch {
       return false
     }
-  }
+  }, [id])
 
-  return { event, speakers, feedback, isLoading, deleteEvent }
+  // Exponemos reload para que, al volver de la edición, puedas recargar
+  return {
+    event,
+    speakers,
+    feedback,
+    isLoading,
+    deleteEvent,
+    reload: fetchEventDetails
+  }
 }

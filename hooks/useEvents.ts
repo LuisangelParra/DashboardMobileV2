@@ -1,6 +1,6 @@
 // hooks/useEvents.ts
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Constants from 'expo-constants'
 import { Event, EventCategory } from '@/types'
 
@@ -43,6 +43,11 @@ export function useEvents(params: {
 } = {}) {
   const [events, setEvents] = useState<Event[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [refreshFlag, setRefreshFlag] = useState(0)
+
+  const refresh = useCallback(() => {
+    setRefreshFlag(f => f + 1)
+  }, [])
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -126,7 +131,11 @@ export function useEvents(params: {
     }
 
     fetchAll()
-  }, [params.search, params.category])
+  }, [
+    params.search,
+    params.category,
+    refreshFlag,   // vuelve a disparar la carga tras cada `refresh()`
+  ])
 
-  return { events, isLoading }
+  return { events, isLoading, refresh }
 }

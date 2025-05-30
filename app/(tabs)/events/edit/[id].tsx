@@ -10,7 +10,8 @@ import {
   Pressable,
   useColorScheme,
   Image,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import Constants from 'expo-constants';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -27,7 +28,7 @@ const {
 });
 const BASE_URL = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`;
 
-type RawRow<T> = { entry_id: string; data: T };
+type RawRow<T> = { entry_id: string; data: T & Record<string, any> };
 type RawEvent = {
   id: number;
   titulo: string;
@@ -39,6 +40,7 @@ type RawEvent = {
   location: string;
   imageUrl: string;
   suscritos: number;
+  // plus any other fields
 };
 
 export default function EditEventScreen() {
@@ -46,12 +48,8 @@ export default function EditEventScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  // get parsed event fields
   const { event, isLoading: loadingEvent } = useEvent(id);
-
-  // store the DB entry_id so we can PUT to the correct row
   const [entryId, setEntryId] = useState<string>('');
-
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -62,11 +60,11 @@ export default function EditEventScreen() {
     location: '',
     imageUrl: '',
   });
-
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // fetch the raw entry_id for this event
+  // Fetch entry_id
   useEffect(() => {
     if (!id) return;
     (async () => {
@@ -81,7 +79,7 @@ export default function EditEventScreen() {
     })();
   }, [id]);
 
-  // once we have the Event object, populate the form
+  // Populate form
   useEffect(() => {
     if (!event) return;
     const [startTime, endTime] = event.time.split(' - ');
@@ -107,7 +105,6 @@ export default function EditEventScreen() {
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-
     if (!formData.name.trim()) newErrors.name = 'Event name is required';
     if (!formData.description.trim()) newErrors.description = 'Description is required';
     if (!formData.category) newErrors.category = 'Category is required';
@@ -116,7 +113,6 @@ export default function EditEventScreen() {
     if (!formData.endTime.trim()) newErrors.endTime = 'End time is required';
     if (!formData.location.trim()) newErrors.location = 'Location is required';
     if (!formData.imageUrl.trim()) newErrors.imageUrl = 'Image URL is required';
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -127,21 +123,29 @@ export default function EditEventScreen() {
       setErrors({ submit: 'Unable to identify event in database.' });
       return;
     }
-
     setIsSubmitting(true);
     try {
-      const payload = {
-        data: {
-          titulo: formData.name,
-          descripcion: formData.description,
-          tema: formData.category,
-          fecha: formData.date,
-          hora_inicio: formData.startTime,
-          hora_fin: formData.endTime,
-          location: formData.location,
-          imageUrl: formData.imageUrl,
-        }
+      // Fetch the original row data to preserve untouched fields
+      const resRow = await fetch(`${BASE_URL}/data/events/all?format=json`);
+      const { data: rows } = (await resRow.json()) as { data: RawRow<RawEvent>[] };
+      const row = rows.find(r => r.entry_id === entryId);
+      if (!row) throw new Error('Original event data not found');
+      const original = row.data;
+
+      // Merge original with updates
+      const merged = {
+        ...original,
+        titulo:      formData.name,
+        descripcion: formData.description,
+        tema:        formData.category,
+        fecha:       formData.date,
+        hora_inicio: formData.startTime,
+        hora_fin:    formData.endTime,
+        location:    formData.location,
+        imageUrl:    formData.imageUrl,
       };
+
+      const payload = { data: merged };
 
       const res = await fetch(
         `${BASE_URL}/data/events/update/${entryId}`,
@@ -151,7 +155,6 @@ export default function EditEventScreen() {
           body: JSON.stringify(payload),
         }
       );
-
       if (!res.ok) {
         const err = await res.json();
         throw new Error(JSON.stringify(err));
@@ -163,6 +166,60 @@ export default function EditEventScreen() {
       setErrors({ submit: 'Failed to update event. Please try again.' });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const confirmDelete = () => {
+    Alert.alert(
+      'Delete Event',
+      'Are you sure you want to delete this event and all its relations?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: handleDelete },
+      ]
+    );
+  };
+
+  const handleDelete = async () => {
+    if (!id || !entryId) {
+      Alert.alert('Error', 'Missing event identifier.');
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      // Delete event_speakers relations
+      const relS = await fetch(`${BASE_URL}/data/event_speakers/all?format=json`);
+      const { data: rs } = (await relS.json()) as { data: RawRow<RawEventSpeaker>[] };
+      for (const r of rs.filter(r => String(r.data.event_id) === id)) {
+        await fetch(
+          `${BASE_URL}/data/event_speakers/delete/${r.entry_id}`,
+          { method: 'DELETE' }
+        );
+      }
+
+      // Delete event_tracks relations
+      const relT = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`);
+      const { data: rt } = (await relT.json()) as { data: RawRow<RawEventTrack>[] };
+      for (const r of rt.filter(r => String(r.data.event_id) === id)) {
+        await fetch(
+          `${BASE_URL}/data/event_tracks/delete/${r.entry_id}`,
+          { method: 'DELETE' }
+        );
+      }
+
+      // Delete the event
+      const resDel = await fetch(
+        `${BASE_URL}/data/events/delete/${entryId}`,
+        { method: 'DELETE' }
+      );
+      if (!resDel.ok) throw new Error('Failed to delete event');
+
+      router.back();
+    } catch (err) {
+      console.error('Error deleting event:', err);
+      Alert.alert('Error', 'Failed to delete event. Please try again.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -193,7 +250,6 @@ export default function EditEventScreen() {
       contentContainerStyle={styles.contentContainer}
     >
       <View style={[styles.formContainer, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}>
-        {/* Image */}
         {formData.imageUrl ? (
           <View style={styles.imagePreviewContainer}>
             <Image
@@ -203,7 +259,7 @@ export default function EditEventScreen() {
             />
             <Pressable
               style={styles.removeImageButton}
-              onPress={() => setFormData(prev => ({ ...prev, imageUrl: '' }))}
+              onPress={() => setFormData(p => ({ ...p, imageUrl: '' }))}
             >
               <X size={20} color="#FFF" />
             </Pressable>
@@ -212,10 +268,9 @@ export default function EditEventScreen() {
           <Pressable
             style={[styles.imageUploadButton, { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }]}
             onPress={() =>
-              setFormData(prev => ({
-                ...prev,
-                imageUrl:
-                  'https://images.pexels.com/photos/2774556/pexels-photo-2774556.jpeg',
+              setFormData(p => ({
+                ...p,
+                imageUrl: 'https://images.pexels.com/photos/2774556/pexels-photo-2774556.jpeg',
               }))
             }
           >
@@ -237,7 +292,7 @@ export default function EditEventScreen() {
             placeholder="Enter event name"
             placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
             value={formData.name}
-            onChangeText={text => setFormData(prev => ({ ...prev, name: text }))}
+            onChangeText={text => setFormData(p => ({ ...p, name: text }))}
           />
           {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
         </View>
@@ -256,7 +311,7 @@ export default function EditEventScreen() {
             multiline
             numberOfLines={4}
             value={formData.description}
-            onChangeText={text => setFormData(prev => ({ ...prev, description: text }))}
+            onChangeText={text => setFormData(p => ({ ...p, description: text }))}
           />
           {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
         </View>
@@ -275,7 +330,7 @@ export default function EditEventScreen() {
                       formData.category === cat ? '#0A84FF' : isDark ? '#2C2C2E' : '#F2F2F7',
                   },
                 ]}
-                onPress={() => setFormData(prev => ({ ...prev, category: cat }))}
+                onPress={() => setFormData(p => ({ ...p, category: cat }))}
               >
                 <Text
                   style={[
@@ -304,7 +359,7 @@ export default function EditEventScreen() {
               placeholder="YYYY-MM-DD"
               placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
               value={formData.date}
-              onChangeText={text => setFormData(prev => ({ ...prev, date: text }))}
+              onChangeText={text => setFormData(p => ({ ...p, date: text }))}
             />
           </View>
           {errors.date && <Text style={styles.errorText}>{errors.date}</Text>}
@@ -324,7 +379,7 @@ export default function EditEventScreen() {
                 placeholder="HH:MM"
                 placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
                 value={formData.startTime}
-                onChangeText={text => setFormData(prev => ({ ...prev, startTime: text }))}
+                onChangeText={text => setFormData(p => ({ ...p, startTime: text }))}
               />
             </View>
             {errors.startTime && <Text style={styles.errorText}>{errors.startTime}</Text>}
@@ -342,7 +397,7 @@ export default function EditEventScreen() {
                 placeholder="HH:MM"
                 placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
                 value={formData.endTime}
-                onChangeText={text => setFormData(prev => ({ ...prev, endTime: text }))}
+                onChangeText={text => setFormData(p => ({ ...p, endTime: text }))}
               />
             </View>
             {errors.endTime && <Text style={styles.errorText}>{errors.endTime}</Text>}
@@ -355,14 +410,11 @@ export default function EditEventScreen() {
           <View style={styles.iconInput}>
             <MapPin size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
             <TextInput
-              style={[
-                styles.input,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' },
-              ]}
+              style={[styles.input, { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' }]}
               placeholder="Enter location"
               placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
               value={formData.location}
-              onChangeText={text => setFormData(prev => ({ ...prev, location: text }))}
+              onChangeText={text => setFormData(p => ({ ...p, location: text }))}
             />
           </View>
           {errors.location && <Text style={styles.errorText}>{errors.location}</Text>}
@@ -373,10 +425,20 @@ export default function EditEventScreen() {
         <Pressable
           style={styles.submitButton}
           onPress={handleSubmit}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isDeleting}
         >
           <Text style={styles.submitButtonText}>
             {isSubmitting ? 'Saving...' : 'Save Changes'}
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.deleteButton}
+          onPress={confirmDelete}
+          disabled={isSubmitting || isDeleting}
+        >
+          <Text style={styles.deleteButtonText}>
+            {isDeleting ? 'Deleting...' : 'Delete Event'}
           </Text>
         </Pressable>
       </View>
@@ -529,4 +591,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  deleteButton: {
+    backgroundColor: '#FF3B30', height: 50, borderRadius: 25,
+    alignItems: 'center', justifyContent: 'center', marginTop: 12
+  },
+  deleteButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' }
 });

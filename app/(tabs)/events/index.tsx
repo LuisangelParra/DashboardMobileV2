@@ -1,8 +1,18 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, useColorScheme, TextInput, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  useColorScheme,
+  TextInput,
+  ActivityIndicator
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { Search, Plus, Filter, ChevronDown, Calendar, MapPin } from 'lucide-react-native';
+import { Search, Plus, Filter, Calendar, MapPin } from 'lucide-react-native';
 import { useEvents } from '@/hooks/useEvents';
 import { EventCategory } from '@/types';
 import { CategoryBadge } from '@/components/events/CategoryBadge';
@@ -11,14 +21,24 @@ export default function EventsScreen() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<EventCategory | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  
-  const { events, isLoading } = useEvents({
+
+  // extraemos refresh de useEvents
+  const { events, isLoading, refresh } = useEvents({
     search: searchQuery,
     category: selectedCategory,
   });
+
+  // detectamos cuando recuperamos el foco
+  const isFocused = useIsFocused();
+  useEffect(() => {
+    if (isFocused) {
+      refresh();
+    }
+  }, [isFocused, refresh]);
 
   const renderEvent = ({ item }) => (
     <Pressable
@@ -29,9 +49,9 @@ export default function EventsScreen() {
       onPress={() => router.push(`/events/${item.id}`)}
     >
       <View style={styles.eventHeader}>
-        <Text 
+        <Text
           style={[
-            styles.eventName, 
+            styles.eventName,
             { color: isDark ? '#FFFFFF' : '#000000' }
           ]}
           numberOfLines={1}
@@ -40,8 +60,8 @@ export default function EventsScreen() {
         </Text>
         <CategoryBadge category={item.category} />
       </View>
-      
-      <Text 
+
+      <Text
         style={[
           styles.eventDescription,
           { color: isDark ? '#EBEBF5' : '#3C3C43' }
@@ -50,11 +70,11 @@ export default function EventsScreen() {
       >
         {item.description}
       </Text>
-      
+
       <View style={styles.eventMeta}>
         <View style={styles.eventMetaItem}>
           <Calendar size={14} color={isDark ? '#8E8E93' : '#3C3C43'} />
-          <Text 
+          <Text
             style={[
               styles.eventMetaText,
               { color: isDark ? '#8E8E93' : '#3C3C43' }
@@ -63,10 +83,10 @@ export default function EventsScreen() {
             {item.date}
           </Text>
         </View>
-        
+
         <View style={styles.eventMetaItem}>
           <MapPin size={14} color={isDark ? '#8E8E93' : '#3C3C43'} />
-          <Text 
+          <Text
             style={[
               styles.eventMetaText,
               { color: isDark ? '#8E8E93' : '#3C3C43' }
@@ -76,9 +96,9 @@ export default function EventsScreen() {
           </Text>
         </View>
       </View>
-      
+
       <View style={styles.ratingContainer}>
-        <Text 
+        <Text
           style={[
             styles.ratingLabel,
             { color: isDark ? '#8E8E93' : '#3C3C43' }
@@ -88,7 +108,7 @@ export default function EventsScreen() {
         </Text>
         <View style={styles.ratingStars}>
           {[1, 2, 3, 4, 5].map(star => (
-            <Text 
+            <Text
               key={`${item.id}-star-${star}`}
               style={[
                 styles.ratingStar,
@@ -98,7 +118,7 @@ export default function EventsScreen() {
               ★
             </Text>
           ))}
-          <Text 
+          <Text
             style={[
               styles.ratingValue,
               { color: isDark ? '#EBEBF5' : '#3C3C43' }
@@ -137,7 +157,7 @@ export default function EventsScreen() {
             onChangeText={setSearchQuery}
           />
         </View>
-        
+
         <Pressable
           style={[
             styles.filterButton,
@@ -148,7 +168,7 @@ export default function EventsScreen() {
           <Filter size={20} color={isDark ? '#FFFFFF' : '#000000'} />
         </Pressable>
       </View>
-      
+
       {showFilters && (
         <View style={[
           styles.filtersContainer,
@@ -168,16 +188,16 @@ export default function EventsScreen() {
               <Text style={styles.clearFilterText}>Clear</Text>
             </Pressable>
           </View>
-          
+
           <View style={styles.categoriesContainer}>
             {categories.map(category => (
               <Pressable
                 key={category}
                 style={[
                   styles.categoryChip,
-                  { 
-                    backgroundColor: selectedCategory === category 
-                      ? '#0A84FF' 
+                  {
+                    backgroundColor: selectedCategory === category
+                      ? '#0A84FF'
                       : isDark ? '#2C2C2E' : '#E5E5EA'
                   }
                 ]}
@@ -187,9 +207,9 @@ export default function EventsScreen() {
               >
                 <Text style={[
                   styles.categoryChipText,
-                  { 
-                    color: selectedCategory === category 
-                      ? '#FFFFFF' 
+                  {
+                    color: selectedCategory === category
+                      ? '#FFFFFF'
                       : isDark ? '#FFFFFF' : '#000000'
                   }
                 ]}>
@@ -200,7 +220,7 @@ export default function EventsScreen() {
           </View>
         </View>
       )}
-      
+
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#0A84FF" />
@@ -209,7 +229,7 @@ export default function EventsScreen() {
         <FlatList
           data={events}
           renderItem={renderEvent}
-          keyExtractor={(item, index) => `event-${index}-${item.id || 'no-id'}`}
+          keyExtractor={(item, index) => `event-${index}-${item.id}`}
           contentContainerStyle={[
             styles.listContent,
             { paddingBottom: insets.bottom + 20 }
@@ -226,7 +246,7 @@ export default function EventsScreen() {
           )}
         />
       )}
-      
+
       <Pressable
         style={[
           styles.addButton,
