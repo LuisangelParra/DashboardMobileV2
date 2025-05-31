@@ -1,3 +1,5 @@
+// app/(tabs)/events/index.tsx
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -14,8 +16,9 @@ import { useIsFocused } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { Search, Plus, Filter, Calendar, MapPin } from 'lucide-react-native';
 import { useEvents } from '@/hooks/useEvents';
-import { EventCategory } from '@/types';
+import { useEventTracks } from '@/hooks/useTracks';
 import { CategoryBadge } from '@/components/events/CategoryBadge';
+import { EventCategory } from '@/types';
 
 export default function EventsScreen() {
   const insets = useSafeAreaInsets();
@@ -40,7 +43,7 @@ export default function EventsScreen() {
     }
   }, [isFocused, refresh]);
 
-  const renderEvent = ({ item }) => (
+  const renderEvent = ({ item }: { item: typeof events[0] }) => (
     <Pressable
       style={[
         styles.eventCard,
@@ -58,8 +61,10 @@ export default function EventsScreen() {
         >
           {item.name}
         </Text>
-        <CategoryBadge category={item.category} />
       </View>
+
+      {/* Badges dinámicos de tracks */}
+      <EventBadges eventId={item.id} />
 
       <Text
         style={[
@@ -131,10 +136,6 @@ export default function EventsScreen() {
     </Pressable>
   );
 
-  const categories: EventCategory[] = [
-    'Workshop', 'Presentation', 'Panel', 'Networking', 'Other'
-  ];
-
   return (
     <View style={[
       styles.container,
@@ -189,35 +190,8 @@ export default function EventsScreen() {
             </Pressable>
           </View>
 
-          <View style={styles.categoriesContainer}>
-            {categories.map(category => (
-              <Pressable
-                key={category}
-                style={[
-                  styles.categoryChip,
-                  {
-                    backgroundColor: selectedCategory === category
-                      ? '#0A84FF'
-                      : isDark ? '#2C2C2E' : '#E5E5EA'
-                  }
-                ]}
-                onPress={() => setSelectedCategory(
-                  selectedCategory === category ? null : category
-                )}
-              >
-                <Text style={[
-                  styles.categoryChipText,
-                  {
-                    color: selectedCategory === category
-                      ? '#FFFFFF'
-                      : isDark ? '#FFFFFF' : '#000000'
-                  }
-                ]}>
-                  {category}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          {/* Aquí podrías listar dinámicamente todos los tracks 
+              usando useTracks() si quieres filtrar por track */}
         </View>
       )}
 
@@ -229,7 +203,7 @@ export default function EventsScreen() {
         <FlatList
           data={events}
           renderItem={renderEvent}
-          keyExtractor={(item, index) => `event-${index}-${item.id}`}
+          keyExtractor={item => item.id}
           contentContainerStyle={[
             styles.listContent,
             { paddingBottom: insets.bottom + 20 }
@@ -248,14 +222,24 @@ export default function EventsScreen() {
       )}
 
       <Pressable
-        style={[
-          styles.addButton,
-          { bottom: insets.bottom + 16 }
-        ]}
+        style={[styles.addButton, { bottom: insets.bottom + 16 }]}
         onPress={() => router.push('/events/add')}
       >
         <Plus size={24} color="#FFFFFF" />
       </Pressable>
+    </View>
+  );
+}
+
+// componente auxiliar para mostrar badges de tracks
+function EventBadges({ eventId }: { eventId: string }) {
+  const { tracks, isLoading } = useEventTracks(eventId);
+  if (isLoading || tracks.length === 0) return null;
+  return (
+    <View style={styles.badgesContainer}>
+      {tracks.map(t => (
+        <CategoryBadge key={t.id} category={t.name as EventCategory} />
+      ))}
     </View>
   );
 }
@@ -357,6 +341,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     lineHeight: 20,
   },
+  badgesContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  
   eventMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
