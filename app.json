@@ -22,7 +22,7 @@
     },
     "extra": {
       "UNIDB_BASE_URL": "https://unidb.openlab.uninorte.edu.co",
-      "UNIDB_CONTRACT_KEY": "bolt123"
+      "UNIDB_CONTRACT_KEY": "bolt1234"
     }
   }
 }

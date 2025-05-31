@@ -1,49 +1,204 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, useColorScheme, Image, Linking, ActivityIndicator } from 'react-native';
+import { useState, useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, useColorScheme, ActivityIndicator, Linking, Platform, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Linkedin, Twitter, Globe, Calendar, Star, TrendingUp, ChevronLeft, Share } from 'lucide-react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { Linkedin, Twitter, Globe, Calendar, Star, TrendingUp, ChevronLeft, Share, Edit2, Mail, Phone } from 'lucide-react-native';
 import { useSpeaker } from '@/hooks/useSpeaker';
 
 export default function SpeakerDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, optimisticData, updatedName, _timestamp } = useLocalSearchParams<{ 
+    id: string; 
+    optimisticData?: string; // ✅ SOPORTE PARA DATOS OPTIMISTAS COMPLETOS
+    updatedName?: string; 
+    _timestamp?: string; 
+  }>();
+  
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   
-  const { speaker, events, isLoading } = useSpeaker(id);
+  // ✅ DETECTAR TAMAÑO DE PANTALLA PARA RESPONSIVIDAD
+  const { width: screenWidth } = Dimensions.get('window');
+  const isTablet = screenWidth >= 768;
+  const isDesktop = screenWidth >= 1024;
+  const isSmallMobile = screenWidth < 375;
+  
+  const { speaker, events, isLoading, error, refetch } = useSpeaker(id);
+  
+  // ✅ ESTADO LOCAL PARA DATOS OPTIMISTAS MEJORADO
+  const [optimisticSpeaker, setOptimisticSpeaker] = useState<any>(null);
+  const [isOptimistic, setIsOptimistic] = useState(false);
   
   // Protección contra arrays undefined/null
   const safeEvents = events || [];
 
-  if (isLoading) {
+  // ✅ MANEJAR DATOS OPTIMISTAS COMPLETOS (DESDE NUEVA CREACIÓN)
+  useEffect(() => {
+    if (optimisticData) {
+      try {
+        const parsedData = JSON.parse(optimisticData);
+        console.log('🎯 Received optimistic data:', parsedData.name);
+        setOptimisticSpeaker(parsedData);
+        setIsOptimistic(true);
+        
+        // ✅ SYNC CON DB DESPUÉS DE UN DELAY
+        const timeoutId = setTimeout(() => {
+          console.log('🔄 Syncing with database after optimistic creation...');
+          refetch();
+          setIsOptimistic(false);
+        }, 2500);
+        
+        return () => clearTimeout(timeoutId);
+      } catch (error) {
+        console.error('❌ Error parsing optimistic data:', error);
+      }
+    }
+  }, [optimisticData, refetch]);
+
+  // ✅ MANEJAR DATOS OPTIMISTAS DE EDICIÓN
+  useEffect(() => {
+    if (updatedName && speaker) {
+      console.log('🎯 Received updated name:', updatedName);
+      setOptimisticSpeaker({
+        ...speaker,
+        name: updatedName
+      });
+      setIsOptimistic(true);
+      
+      // ✅ SYNC CON DB DESPUÉS DE UN DELAY
+      const timeoutId = setTimeout(() => {
+        console.log('🔄 Syncing with database after optimistic update...');
+        refetch();
+        setIsOptimistic(false);
+      }, 2000);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [updatedName, speaker, refetch]);
+
+  // ✅ ACTUALIZAR DATOS OPTIMISTAS CUANDO LLEGAN DATOS REALES
+  useEffect(() => {
+    if (speaker && !updatedName && !optimisticData) {
+      setOptimisticSpeaker(speaker);
+      setIsOptimistic(false);
+    }
+  }, [speaker, updatedName, optimisticData]);
+
+  // ✅ RECARGAR DATOS CUANDO LA PANTALLA RECIBE FOCUS
+  useFocusEffect(
+    useCallback(() => {
+      if (!updatedName && !optimisticData) {
+        console.log('🎯 Speaker detail screen focused, refreshing data for ID:', id);
+        if (refetch) {
+          refetch();
+        }
+      }
+    }, [refetch, id, updatedName, optimisticData])
+  );
+
+  // ✅ USAR DATOS OPTIMISTAS O REALES
+  const displaySpeaker = optimisticSpeaker || speaker;
+
+  // ✅ FUNCIÓN PARA COMPARTIR SPEAKER
+  const handleShare = async () => {
+    if (!displaySpeaker) return;
+    
+    const shareText = `Check out ${displaySpeaker.name}${displaySpeaker.company ? ` from ${displaySpeaker.company}` : ''}`;
+    
+    if (Platform.OS === 'web') {
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: `Speaker: ${displaySpeaker.name}`,
+            text: shareText,
+            url: window.location.href,
+          });
+        } catch (error) {
+          // Fallback: copy to clipboard
+          navigator.clipboard?.writeText(`${shareText}\n${window.location.href}`);
+        }
+      } else {
+        // Fallback: copy to clipboard
+        navigator.clipboard?.writeText(`${shareText}\n${window.location.href}`);
+      }
+    }
+  };
+
+  console.log('🔍 SpeakerDetailScreen - ID:', id, 'Loading:', isLoading, 'Speaker:', displaySpeaker?.name, 'Error:', error, 'Optimistic:', isOptimistic);
+
+  if (isLoading && !displaySpeaker) {
     return (
       <View style={[
         styles.loadingContainer,
         { backgroundColor: isDark ? '#000000' : '#F2F2F7' }
       ]}>
         <ActivityIndicator size="large" color="#0A84FF" />
+        <Text style={[
+          styles.loadingText, 
+          { 
+            color: isDark ? '#FFFFFF' : '#000000',
+            fontSize: isSmallMobile ? 14 : 16
+          }
+        ]}>
+          Loading speaker...
+        </Text>
       </View>
     );
   }
 
-  if (!speaker) {
+  if ((error || !displaySpeaker) && !isOptimistic) {
     return (
       <View style={[
         styles.errorContainer,
         { backgroundColor: isDark ? '#000000' : '#F2F2F7' }
       ]}>
         <Text style={[
-          styles.errorText,
-          { color: isDark ? '#FFFFFF' : '#000000' }
+          styles.errorText, 
+          { 
+            color: isDark ? '#FFFFFF' : '#000000',
+            fontSize: isSmallMobile ? 14 : 16
+          }
         ]}>
-          Speaker not found
+          {error || 'Speaker not found'}
         </Text>
-        <Pressable
-          style={styles.backButton}
+        <Text style={[
+          styles.debugText, 
+          { 
+            color: isDark ? '#8E8E93' : '#666666',
+            fontSize: isSmallMobile ? 10 : 12
+          }
+        ]}>
+          Searching for speaker ID: {id}
+        </Text>
+        <Pressable 
+          style={[
+            styles.retryButton,
+            { 
+              paddingHorizontal: isSmallMobile ? 16 : 20,
+              paddingVertical: isSmallMobile ? 10 : 12
+            }
+          ]}
+          onPress={() => {
+            console.log('🔄 Manual retry for speaker ID:', id);
+            refetch();
+          }}
+        >
+          <Text style={[
+            styles.retryButtonText,
+            { fontSize: isSmallMobile ? 14 : 16 }
+          ]}>
+            Retry
+          </Text>
+        </Pressable>
+        <Pressable 
+          style={styles.backButton} 
           onPress={() => router.back()}
         >
-          <Text style={styles.backButtonText}>
+          <Text style={[
+            styles.backButtonText,
+            { fontSize: isSmallMobile ? 14 : 16 }
+          ]}>
             Go Back
           </Text>
         </Pressable>
@@ -51,289 +206,477 @@ export default function SpeakerDetailScreen() {
     );
   }
 
-  const handleSocialLink = (url: string) => {
-    Linking.openURL(url).catch((err) => console.error('Error opening URL:', err));
-  };
-
   return (
-    <ScrollView 
-      style={[
-        styles.container,
-        { backgroundColor: isDark ? '#000000' : '#F2F2F7' }
-      ]}
-      contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
-    >
+    <View style={[
+      styles.container,
+      { backgroundColor: isDark ? '#000000' : '#F2F2F7' }
+    ]}>
+      {/* ✅ HEADER RESPONSIVO MEJORADO */}
       <View style={[
-        styles.header,
-        { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
+        styles.header, 
+        { 
+          paddingTop: insets.top + (isSmallMobile ? 4 : 8),
+          paddingHorizontal: isSmallMobile ? 12 : 16
+        }
       ]}>
+        <Pressable 
+          style={[
+            styles.headerButton,
+            { 
+              width: isSmallMobile ? 36 : 40,
+              height: isSmallMobile ? 36 : 40
+            }
+          ]} 
+          onPress={() => router.back()}
+        >
+          <ChevronLeft size={isSmallMobile ? 20 : 24} color={isDark ? '#FFFFFF' : '#000000'} />
+        </Pressable>
+        
+        <Text style={[
+          styles.headerTitle, 
+          { 
+            color: isDark ? '#FFFFFF' : '#000000',
+            fontSize: isSmallMobile ? 18 : isTablet ? 24 : 20
+          }
+        ]}>
+          Speaker Details
+        </Text>
+        
         <View style={styles.headerActions}>
+          {/* ✅ BOTÓN COMPARTIR */}
           <Pressable 
             style={[
               styles.headerActionButton,
-              { backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)' }
+              { 
+                width: isSmallMobile ? 36 : 40,
+                height: isSmallMobile ? 36 : 40,
+                marginRight: 8
+              }
             ]}
-            onPress={() => router.back()}
+            onPress={handleShare}
           >
-            <ChevronLeft size={24} color={isDark ? '#FFFFFF' : '#000000'} />
+            <Share size={isSmallMobile ? 18 : 20} color="#007AFF" />
           </Pressable>
           
+          {/* ✅ BOTÓN EDITAR MEJORADO */}
           <Pressable 
             style={[
               styles.headerActionButton,
-              { backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)' }
+              { 
+                backgroundColor: '#007AFF',
+                width: isSmallMobile ? 36 : 40,
+                height: isSmallMobile ? 36 : 40,
+                borderRadius: isSmallMobile ? 18 : 20
+              }
             ]}
-            onPress={() => {/* Share functionality */}}
+            onPress={() => router.push(`/(tabs)/speakers/edit/${id}`)}
           >
-            <Share size={20} color={isDark ? '#FFFFFF' : '#000000'} />
+            <Edit2 size={isSmallMobile ? 16 : 18} color="#FFFFFF" />
           </Pressable>
         </View>
+      </View>
 
-        {/* Protección para imageUrl que puede no existir */}
-        {speaker.imageUrl ? (
-          <Image
-            source={{ uri: speaker.imageUrl }}
-            style={styles.profileImage}
-            resizeMode="cover"
-          />
-        ) : (
+      <ScrollView 
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ 
+          paddingBottom: insets.bottom + 20,
+          paddingHorizontal: isSmallMobile ? 12 : 16
+        }}
+      >
+        {/* ✅ SPEAKER INFO CARD RESPONSIVO */}
+        <View style={[
+          styles.speakerCard,
+          { 
+            backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+            borderRadius: isSmallMobile ? 12 : 16,
+            padding: isSmallMobile ? 16 : isTablet ? 28 : 24,
+            marginBottom: isSmallMobile ? 12 : 16
+          }
+        ]}>
+          {/* ✅ BANNER OPTIMISTA MEJORADO */}
+          {isOptimistic && (
+            <View style={[
+              styles.optimisticBanner, 
+              { 
+                backgroundColor: 'rgba(0, 122, 255, 0.1)',
+                borderRadius: isSmallMobile ? 8 : 10,
+                padding: isSmallMobile ? 10 : 12,
+                marginBottom: isSmallMobile ? 12 : 16
+              }
+            ]}>
+              <Text style={[
+                styles.optimisticText, 
+                { 
+                  color: '#007AFF',
+                  fontSize: isSmallMobile ? 12 : 14
+                }
+              ]}>
+                {optimisticData ? '✨ New speaker! Syncing with database...' : '⚡ Updated! Syncing with database...'}
+              </Text>
+            </View>
+          )}
+
+          {/* ✅ PROFILE SECTION RESPONSIVO */}
           <View style={[
-            styles.profileImagePlaceholder,
-            { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
+            styles.profileSection,
+            {
+              flexDirection: isSmallMobile ? 'column' : 'row',
+              alignItems: isSmallMobile ? 'center' : 'center',
+              marginBottom: isSmallMobile ? 20 : 24
+            }
+          ]}>
+            <View style={[
+              styles.avatarContainer,
+              { 
+                backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+                width: isSmallMobile ? 70 : isTablet ? 100 : 80,
+                height: isSmallMobile ? 70 : isTablet ? 100 : 80,
+                borderRadius: isSmallMobile ? 35 : isTablet ? 50 : 40,
+                marginRight: isSmallMobile ? 0 : 16,
+                marginBottom: isSmallMobile ? 16 : 0,
+                // ✅ SOMBRA ELEGANTE
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 8,
+                elevation: 4,
+              }
+            ]}>
+              <Text style={[
+                styles.avatarText,
+                { 
+                  color: isDark ? '#FFFFFF' : '#000000',
+                  fontSize: isSmallMobile ? 28 : isTablet ? 40 : 32
+                }
+              ]}>
+                {displaySpeaker?.name?.charAt(0)?.toUpperCase() || 'S'}
+              </Text>
+            </View>
+            
+            <View style={[
+              styles.speakerInfo,
+              { alignItems: isSmallMobile ? 'center' : 'flex-start' }
+            ]}>
+              <Text style={[
+                styles.speakerName,
+                { 
+                  color: isDark ? '#FFFFFF' : '#000000',
+                  fontSize: isSmallMobile ? 20 : isTablet ? 28 : 24,
+                  textAlign: isSmallMobile ? 'center' : 'left'
+                }
+              ]}>
+                {displaySpeaker?.name || 'Unknown Speaker'}
+              </Text>
+              
+              {displaySpeaker?.company && (
+                <Text style={[
+                  styles.speakerCompany,
+                  { 
+                    color: isDark ? '#8E8E93' : '#3C3C43',
+                    fontSize: isSmallMobile ? 14 : isTablet ? 18 : 16,
+                    textAlign: isSmallMobile ? 'center' : 'left'
+                  }
+                ]}>
+                  {displaySpeaker.company}
+                </Text>
+              )}
+              
+              {displaySpeaker?.role && (
+                <Text style={[
+                  styles.speakerRole,
+                  { 
+                    color: isDark ? '#8E8E93' : '#3C3C43',
+                    fontSize: isSmallMobile ? 12 : isTablet ? 16 : 14,
+                    textAlign: isSmallMobile ? 'center' : 'left'
+                  }
+                ]}>
+                  {displaySpeaker.role}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          {/* ✅ CONTACT INFO MEJORADO */}
+          {(displaySpeaker?.email || displaySpeaker?.phone) && (
+            <View style={[
+              styles.contactSection,
+              { marginBottom: isSmallMobile ? 20 : 24 }
+            ]}>
+              <Text style={[
+                styles.sectionTitle,
+                { 
+                  color: isDark ? '#FFFFFF' : '#000000',
+                  fontSize: isSmallMobile ? 16 : isTablet ? 20 : 18
+                }
+              ]}>
+                Contact Information
+              </Text>
+              
+              {displaySpeaker.email && (
+                <Pressable 
+                  style={styles.contactItem}
+                  onPress={() => Linking.openURL(`mailto:${displaySpeaker.email}`)}
+                >
+                  <Mail size={isSmallMobile ? 16 : 18} color="#007AFF" />
+                  <Text style={[
+                    styles.contactText,
+                    { 
+                      color: '#007AFF',
+                      fontSize: isSmallMobile ? 14 : 16
+                    }
+                  ]}>
+                    {displaySpeaker.email}
+                  </Text>
+                </Pressable>
+              )}
+              
+              {displaySpeaker.phone && (
+                <Pressable 
+                  style={styles.contactItem}
+                  onPress={() => Linking.openURL(`tel:${displaySpeaker.phone}`)}
+                >
+                  <Phone size={isSmallMobile ? 16 : 18} color="#007AFF" />
+                  <Text style={[
+                    styles.contactText,
+                    { 
+                      color: '#007AFF',
+                      fontSize: isSmallMobile ? 14 : 16
+                    }
+                  ]}>
+                    {displaySpeaker.phone}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+
+          {/* ✅ BIO SECTION RESPONSIVO */}
+          {displaySpeaker?.bio && displaySpeaker.bio !== 'No bio available' && (
+            <View style={[
+              styles.bioSection,
+              { marginBottom: isSmallMobile ? 20 : 24 }
+            ]}>
+              <Text style={[
+                styles.sectionTitle,
+                { 
+                  color: isDark ? '#FFFFFF' : '#000000',
+                  fontSize: isSmallMobile ? 16 : isTablet ? 20 : 18
+                }
+              ]}>
+                Biography
+              </Text>
+              <Text style={[
+                styles.bioText,
+                { 
+                  color: isDark ? '#8E8E93' : '#3C3C43',
+                  fontSize: isSmallMobile ? 14 : 16,
+                  lineHeight: isSmallMobile ? 20 : 24
+                }
+              ]}>
+                {displaySpeaker.bio}
+              </Text>
+            </View>
+          )}
+
+          {/* ✅ EXPERTISE RESPONSIVO */}
+          {displaySpeaker?.expertise && displaySpeaker.expertise.length > 0 && (
+            <View style={[
+              styles.expertiseSection,
+              { marginBottom: isSmallMobile ? 20 : 24 }
+            ]}>
+              <Text style={[
+                styles.sectionTitle,
+                { 
+                  color: isDark ? '#FFFFFF' : '#000000',
+                  fontSize: isSmallMobile ? 16 : isTablet ? 20 : 18
+                }
+              ]}>
+                Expertise
+              </Text>
+              <View style={[
+                styles.expertiseTags,
+                { gap: isSmallMobile ? 6 : 8 }
+              ]}>
+                {displaySpeaker.expertise.map((skill, index) => (
+                  <View 
+                    key={index}
+                    style={[
+                      styles.expertiseTag,
+                      { 
+                        backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+                        paddingHorizontal: isSmallMobile ? 10 : 12,
+                        paddingVertical: isSmallMobile ? 5 : 6,
+                        borderRadius: isSmallMobile ? 14 : 16
+                      }
+                    ]}
+                  >
+                    <Text style={[
+                      styles.expertiseTagText,
+                      { 
+                        color: isDark ? '#FFFFFF' : '#000000',
+                        fontSize: isSmallMobile ? 12 : 14
+                      }
+                    ]}>
+                      {skill}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* ✅ SOCIAL LINKS RESPONSIVO */}
+          {displaySpeaker?.social && Object.keys(displaySpeaker.social).length > 0 && (
+            <View style={styles.socialSection}>
+              <Text style={[
+                styles.sectionTitle,
+                { 
+                  color: isDark ? '#FFFFFF' : '#000000',
+                  fontSize: isSmallMobile ? 16 : isTablet ? 20 : 18
+                }
+              ]}>
+                Social Links
+              </Text>
+              <View style={[
+                styles.socialLinks,
+                { 
+                  gap: isSmallMobile ? 8 : 12,
+                  flexDirection: isSmallMobile ? 'column' : 'row'
+                }
+              ]}>
+                {displaySpeaker.social.linkedin && (
+                  <Pressable 
+                    style={[
+                      styles.socialButton,
+                      { 
+                        paddingHorizontal: isSmallMobile ? 10 : 12,
+                        paddingVertical: isSmallMobile ? 6 : 8,
+                        flex: isSmallMobile ? 0 : 1
+                      }
+                    ]}
+                    onPress={() => Linking.openURL(displaySpeaker.social!.linkedin!)}
+                  >
+                    <Linkedin size={isSmallMobile ? 16 : 20} color="#0077B5" />
+                    <Text style={[
+                      styles.socialButtonText,
+                      { fontSize: isSmallMobile ? 12 : 14 }
+                    ]}>
+                      LinkedIn
+                    </Text>
+                  </Pressable>
+                )}
+                
+                {displaySpeaker.social.twitter && (
+                  <Pressable 
+                    style={[
+                      styles.socialButton,
+                      { 
+                        paddingHorizontal: isSmallMobile ? 10 : 12,
+                        paddingVertical: isSmallMobile ? 6 : 8,
+                        flex: isSmallMobile ? 0 : 1
+                      }
+                    ]}
+                    onPress={() => Linking.openURL(displaySpeaker.social!.twitter!)}
+                  >
+                    <Twitter size={isSmallMobile ? 16 : 20} color="#1DA1F2" />
+                    <Text style={[
+                      styles.socialButtonText,
+                      { fontSize: isSmallMobile ? 12 : 14 }
+                    ]}>
+                      Twitter
+                    </Text>
+                  </Pressable>
+                )}
+                
+                {displaySpeaker.social.website && (
+                  <Pressable 
+                    style={[
+                      styles.socialButton,
+                      { 
+                        paddingHorizontal: isSmallMobile ? 10 : 12,
+                        paddingVertical: isSmallMobile ? 6 : 8,
+                        flex: isSmallMobile ? 0 : 1
+                      }
+                    ]}
+                    onPress={() => Linking.openURL(displaySpeaker.social!.website!)}
+                  >
+                    <Globe size={isSmallMobile ? 16 : 20} color="#007AFF" />
+                    <Text style={[
+                      styles.socialButtonText,
+                      { fontSize: isSmallMobile ? 12 : 14 }
+                    ]}>
+                      Website
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* ✅ EVENTOS DEL SPEAKER (SI LOS HAY) */}
+        {safeEvents.length > 0 && (
+          <View style={[
+            styles.eventsCard,
+            { 
+              backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+              borderRadius: isSmallMobile ? 12 : 16,
+              padding: isSmallMobile ? 16 : isTablet ? 28 : 24
+            }
           ]}>
             <Text style={[
-              styles.profileImageInitials,
-              { color: isDark ? '#FFFFFF' : '#000000' }
+              styles.sectionTitle,
+              { 
+                color: isDark ? '#FFFFFF' : '#000000',
+                fontSize: isSmallMobile ? 16 : isTablet ? 20 : 18,
+                marginBottom: isSmallMobile ? 12 : 16
+              }
             ]}>
-              {speaker.name.split(' ').map(n => n[0]).join('')}
+              Events ({safeEvents.length})
             </Text>
-          </View>
-        )}
-
-        <Text style={[
-          styles.name,
-          { color: isDark ? '#FFFFFF' : '#000000' }
-        ]}>
-          {speaker.name}
-        </Text>
-        
-        <Text style={[
-          styles.role,
-          { color: isDark ? '#EBEBF5' : '#3C3C43' }
-        ]}>
-          {speaker.role || 'Speaker'}
-        </Text>
-        
-        {/* company puede no existir en tu tipo Speaker */}
-        {speaker.company && (
-          <Text style={[
-            styles.company,
-            { color: isDark ? '#8E8E93' : '#6C6C70' }
-          ]}>
-            {speaker.company}
-          </Text>
-        )}
-
-        {/* social puede no existir en tu tipo Speaker */}
-        {speaker.social && (
-          <View style={styles.socialLinks}>
-            {speaker.social.linkedin && (
-              <Pressable
-                style={[
-                  styles.socialButton,
-                  { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
-                ]}
-                onPress={() => handleSocialLink(speaker.social.linkedin!)}
-              >
-                <Linkedin size={20} color={isDark ? '#FFFFFF' : '#000000'} />
-              </Pressable>
-            )}
-            
-            {speaker.social.twitter && (
-              <Pressable
-                style={[
-                  styles.socialButton,
-                  { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
-                ]}
-                onPress={() => handleSocialLink(speaker.social.twitter!)}
-              >
-                <Twitter size={20} color={isDark ? '#FFFFFF' : '#000000'} />
-              </Pressable>
-            )}
-            
-            {speaker.social.website && (
-              <Pressable
-                style={[
-                  styles.socialButton,
-                  { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
-                ]}
-                onPress={() => handleSocialLink(speaker.social.website!)}
-              >
-                <Globe size={20} color={isDark ? '#FFFFFF' : '#000000'} />
-              </Pressable>
-            )}
-          </View>
-        )}
-      </View>
-
-      <View style={styles.stats}>
-        <View style={[
-          styles.statCard,
-          { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
-        ]}>
-          <Calendar size={24} color="#0A84FF" />
-          <Text style={[
-            styles.statValue,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            {safeEvents.length}
-          </Text>
-          <Text style={[
-            styles.statLabel,
-            { color: isDark ? '#8E8E93' : '#3C3C43' }
-          ]}>
-            Events
-          </Text>
-        </View>
-
-        <View style={[
-          styles.statCard,
-          { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
-        ]}>
-          <Star size={24} color="#FF9500" />
-          <Text style={[
-            styles.statValue,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            {speaker.rating.toFixed(1)}
-          </Text>
-          <Text style={[
-            styles.statLabel,
-            { color: isDark ? '#8E8E93' : '#3C3C43' }
-          ]}>
-            Rating
-          </Text>
-        </View>
-
-        <View style={[
-          styles.statCard,
-          { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
-        ]}>
-          <TrendingUp size={24} color="#30D158" />
-          <Text style={[
-            styles.statValue,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            {speaker.expertise?.length || 0}
-          </Text>
-          <Text style={[
-            styles.statLabel,
-            { color: isDark ? '#8E8E93' : '#3C3C43' }
-          ]}>
-            Skills
-          </Text>
-        </View>
-      </View>
-
-      <View style={[
-        styles.section,
-        { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
-      ]}>
-        <Text style={[
-          styles.sectionTitle,
-          { color: isDark ? '#FFFFFF' : '#000000' }
-        ]}>
-          About
-        </Text>
-        <Text style={[
-          styles.bio,
-          { color: isDark ? '#EBEBF5' : '#3C3C43' }
-        ]}>
-          {speaker.bio || 'No bio available'}
-        </Text>
-      </View>
-
-      {/* Solo mostrar sección de expertise si existe */}
-      {speaker.expertise && speaker.expertise.length > 0 && (
-        <View style={[
-          styles.section,
-          { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
-        ]}>
-          <Text style={[
-            styles.sectionTitle,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            Expertise
-          </Text>
-          <View style={styles.expertiseContainer}>
-            {speaker.expertise.map((skill, index) => (
-              <View
+            {safeEvents.slice(0, 3).map((event, index) => (
+              <View 
                 key={index}
                 style={[
-                  styles.expertiseTag,
-                  { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
-                ]}
-              >
-                <Text style={[
-                  styles.expertiseText,
-                  { color: isDark ? '#FFFFFF' : '#000000' }
+                  styles.eventItem,
+                  { 
+                    backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+                    borderRadius: isSmallMobile ? 8 : 10,
+                    padding: isSmallMobile ? 12 : 16,
+                    marginBottom: isSmallMobile ? 8 : 12
+                  }
                 ]}>
-                  {skill}
+                <Text style={[
+                  styles.eventTitle,
+                  { 
+                    color: isDark ? '#FFFFFF' : '#000000',
+                    fontSize: isSmallMobile ? 14 : 16
+                  }
+                ]}>
+                  {event.title || 'Event'}
                 </Text>
+                {event.date && (
+                  <Text style={[
+                    styles.eventDate,
+                    { 
+                      color: isDark ? '#8E8E93' : '#3C3C43',
+                      fontSize: isSmallMobile ? 12 : 14
+                    }
+                  ]}>
+                    📅 {event.date}
+                  </Text>
+                )}
               </View>
             ))}
           </View>
-        </View>
-      )}
-
-      {/* Usando safeEvents en lugar de events */}
-      {safeEvents.length > 0 && (
-        <View style={[
-          styles.section,
-          { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
-        ]}>
-          <Text style={[
-            styles.sectionTitle,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            Events
-          </Text>
-          {safeEvents.map(event => (
-            <Pressable
-              key={event.id}
-              style={[
-                styles.eventCard,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
-              ]}
-              onPress={() => router.push(`/events/${event.id}`)}
-            >
-              <Image
-                source={{ uri: event.imageUrl }}
-                style={styles.eventImage}
-                resizeMode="cover"
-              />
-              <View style={styles.eventInfo}>
-                <Text style={[
-                  styles.eventName,
-                  { color: isDark ? '#FFFFFF' : '#000000' }
-                ]}>
-                  {event.name}
-                </Text>
-                <Text style={[
-                  styles.eventDate,
-                  { color: isDark ? '#8E8E93' : '#3C3C43' }
-                ]}>
-                  {event.date} • {event.time}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      )}
-    </ScrollView>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
+// ✅ ESTILOS RESPONSIVOS ACTUALIZADOS
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -343,6 +686,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  loadingText: {
+    marginTop: 16,
+    fontWeight: '500',
+  },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -350,155 +697,170 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   errorText: {
-    fontSize: 18,
+    textAlign: 'center',
     marginBottom: 16,
-  },
-  backButton: {
-    padding: 12,
-    backgroundColor: '#0A84FF',
-    borderRadius: 8,
-  },
-  backButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: '500',
   },
   header: {
-    padding: 20,
+    flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
-    margin: 16,
+    justifyContent: 'space-between',
+    paddingBottom: 8,
+  },
+  headerButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+      },
+    }),
+  },
+  headerTitle: {
+    fontWeight: '600',
   },
   headerActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 16,
+    alignItems: 'center',
   },
   headerActionButton: {
-    width: 40,
-    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+      },
+    }),
   },
-  profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    marginBottom: 16,
-  },
-  profileImagePlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    marginBottom: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  profileImageInitials: {
-    fontSize: 36,
-    fontWeight: '600',
-  },
-  name: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  role: {
-    fontSize: 16,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  company: {
-    fontSize: 14,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  socialLinks: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  socialButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginBottom: 16,
-    gap: 12,
-  },
-  statCard: {
+  content: {
     flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
   },
-  statValue: {
-    fontSize: 20,
+  speakerCard: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  profileSection: {},
+  avatarContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
     fontWeight: '700',
-    marginTop: 8,
+  },
+  speakerInfo: {
+    flex: 1,
+  },
+  speakerName: {
+    fontWeight: '700',
     marginBottom: 4,
   },
-  statLabel: {
-    fontSize: 12,
+  speakerCompany: {
+    marginBottom: 2,
     fontWeight: '500',
   },
-  section: {
-    margin: 16,
-    marginTop: 0,
-    padding: 16,
-    borderRadius: 12,
+  speakerRole: {
+    opacity: 0.8,
   },
+  contactSection: {},
   sectionTitle: {
-    fontSize: 18,
     fontWeight: '600',
     marginBottom: 12,
   },
-  bio: {
-    fontSize: 15,
-    lineHeight: 22,
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+      },
+    }),
   },
-  expertiseContainer: {
+  contactText: {
+    fontWeight: '500',
+  },
+  bioSection: {},
+  bioText: {},
+  expertiseSection: {},
+  expertiseTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
   },
-  expertiseTag: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  expertiseText: {
-    fontSize: 14,
+  expertiseTag: {},
+  expertiseTagText: {
     fontWeight: '500',
   },
-  eventCard: {
+  socialSection: {},
+  socialLinks: {},
+  socialButton: {
     flexDirection: 'row',
-    borderRadius: 12,
-    overflow: 'hidden',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,122,255,0.1)',
+    borderRadius: 8,
+    gap: 6,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+      },
+    }),
+  },
+  socialButtonText: {
+    fontWeight: '500',
+    color: '#007AFF',
+  },
+  backButton: {
+    padding: 8,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+      },
+    }),
+  },
+  backButtonText: {
+    color: '#007AFF',
+  },
+  debugText: {
+    textAlign: 'center',
+    marginBottom: 16,
+    fontFamily: Platform.select({ ios: 'Courier', android: 'monospace', default: 'monospace' }),
+  },
+  retryButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
     marginBottom: 12,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+      },
+    }),
   },
-  eventImage: {
-    width: 80,
-    height: 80,
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
-  eventInfo: {
-    flex: 1,
-    padding: 12,
-    justifyContent: 'center',
+  optimisticBanner: {
+    alignItems: 'center',
   },
-  eventName: {
-    fontSize: 16,
+  optimisticText: {
+    fontWeight: '600',
+  },
+  eventsCard: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  eventItem: {},
+  eventTitle: {
     fontWeight: '600',
     marginBottom: 4,
   },
-  eventDate: {
-    fontSize: 14,
-  },
+  eventDate: {},
 });

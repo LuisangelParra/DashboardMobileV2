@@ -1,319 +1,209 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Pressable, useColorScheme } from 'react-native';
-import { router } from 'expo-router';
-import { Mail, Briefcase, Award } from 'lucide-react-native';
+// AddSpeakerScreen.tsx
 
-export default function CreateSpeakerScreen() {
+import { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, Pressable, Alert, ScrollView, useColorScheme, ActivityIndicator } from 'react-native';
+import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ArrowLeft, Save, User } from 'lucide-react-native';
+import Constants from 'expo-constants';
+
+const {
+  UNIDB_BASE_URL,
+  UNIDB_CONTRACT_KEY
+} = (Constants.expoConfig!.extra as {
+  UNIDB_BASE_URL: string;
+  UNIDB_CONTRACT_KEY: string;
+});
+const BASE_URL = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`;
+
+export default function AddSpeakerScreen() {
+  const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    role: '',
-    company: '',
-    bio: '',
-    expertise: [] as string[],
-  });
-  
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  
-  const expertiseAreas = [
-    'Web Development',
-    'Mobile Development',
-    'AI/ML',
-    'Cloud Computing',
-    'DevOps',
-    'UI/UX Design',
-    'Cybersecurity',
-    'Blockchain',
-    'Data Science',
-    'IoT',
-  ];
+  const [speakerName, setSpeakerName] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.name.trim()) {
-      newErrors.name = 'Name is required';
+    if (!speakerName.trim()) {
+      Alert.alert('Error', 'Speaker name is required');
+      return false;
     }
     
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Invalid email address';
+    if (speakerName.trim().length < 2) {
+      Alert.alert('Error', 'Speaker name must be at least 2 characters long');
+      return false;
     }
     
-    if (!formData.role.trim()) {
-      newErrors.role = 'Role is required';
-    }
-    
-    if (!formData.bio.trim()) {
-      newErrors.bio = 'Bio is required';
-    }
-    
-    if (formData.expertise.length === 0) {
-      newErrors.expertise = 'Select at least one area of expertise';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return true;
   };
 
-  const handleSubmit = async () => {
-    if (!validateForm()) {
-      return;
-    }
+  const handleSave = async () => {
+    if (!validateForm()) return;
+    
+    setLoading(true);
     
     try {
-      // In a real app, this would be an API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('💾 Creating new speaker...');
       
-      // Navigate back to speakers list
-      router.back();
-    } catch (error) {
-      console.error('Error creating speaker:', error);
-      setErrors({
-        submit: 'Failed to create speaker. Please try again.',
+      // ✅ GENERAR ID TEMPORAL PARA UPDATE OPTIMISTA
+      const tempId = Date.now().toString();
+      const speakerData = {
+        id: tempId,
+        name: speakerName.trim(),
+        email: null,
+        company: null,
+        phone: null,
+        bio: 'No bio available',
+        role: 'Speaker',
+        expertise: [],
+        social: {},
+        rating: 4.5,
+        imageUrl: null,
+      };
+      
+      console.log('📤 Speaker data to create:', speakerData);
+      
+      // ✅ NAVEGACIÓN INMEDIATA CON DATOS OPTIMISTAS
+      console.log('🚀 Navigating immediately with new speaker data...');
+      
+      // ✅ CREAR EL SPEAKER EN BACKGROUND Y NAVEGAR INMEDIATAMENTE
+      const createPromise = fetch(`${BASE_URL}/data/store`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          table_name: "speakers",
+          data: { name: speakerName.trim() }
+        }),
       });
+      
+      // ✅ NAVEGAR INMEDIATAMENTE A LA LISTA CON EL NUEVO SPEAKER
+      router.replace({
+        pathname: '/(tabs)/speakers',
+        params: { 
+          newSpeaker: JSON.stringify(speakerData),
+          _timestamp: Date.now().toString()
+        }
+      });
+      
+      // ✅ COMPLETAR LA CREACIÓN EN BACKGROUND
+      const response = await createPromise;
+      
+      console.log('📡 Create Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Create Response error:', errorText);
+        // ✅ SI FALLA, MOSTRAR ERROR PERO NO INTERRUMPIR LA NAVEGACIÓN
+        setTimeout(() => {
+          Alert.alert('Warning', 'Speaker was added locally but may not be saved to server. Please refresh to verify.');
+        }, 1000);
+        return;
+      }
+      
+      const result = await response.json();
+      console.log('✅ Speaker created successfully:', result);
+      
+    } catch (error) {
+      console.error('❌ Error creating speaker:', error);
+      // ✅ MOSTRAR ERROR DESPUÉS DE UN DELAY PARA NO INTERRUMPIR LA EXPERIENCIA
+      setTimeout(() => {
+        Alert.alert('Warning', 'Speaker was added locally but may not be saved to server. Please refresh to verify.');
+      }, 1000);
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const toggleExpertise = (expertise: string) => {
-    setFormData(prev => ({
-      ...prev,
-      expertise: prev.expertise.includes(expertise)
-        ? prev.expertise.filter(e => e !== expertise)
-        : [...prev.expertise, expertise],
-    }));
   };
 
   return (
-    <ScrollView
-      style={[
-        styles.container,
-        { backgroundColor: isDark ? '#000000' : '#F2F2F7' }
-      ]}
-      contentContainerStyle={styles.contentContainer}
-    >
-      <View style={[
-        styles.formContainer,
-        { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
-      ]}>
-        {/* Profile Image Placeholder */}
-        <View style={[
-          styles.profileImagePlaceholder,
-          { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
-        ]}>
-          <Text style={[
-            styles.profileImageInitials,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            {formData.name
-              ? formData.name.split(' ').map(n => n[0]).join('')
-              : 'Add\nPhoto'}
-          </Text>
-        </View>
+    <View style={[styles.container, { backgroundColor: isDark ? '#000000' : '#F2F2F7' }]}>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <Pressable style={styles.backButton} onPress={() => router.back()}>
+          <ArrowLeft size={24} color={isDark ? '#FFFFFF' : '#000000'} />
+        </Pressable>
         
-        {/* Name */}
-        <View style={styles.inputContainer}>
-          <Text style={[
-            styles.label,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            Full Name *
-          </Text>
-          <TextInput
-            style={[
-              styles.input,
-              { 
-                backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
-                color: isDark ? '#FFFFFF' : '#000000',
-              }
-            ]}
-            placeholder="Enter full name"
-            placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-            value={formData.name}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
-          />
-          {errors.name && (
-            <Text style={styles.errorText}>{errors.name}</Text>
-          )}
-        </View>
+        <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+          Add Speaker
+        </Text>
         
-        {/* Email */}
-        <View style={styles.inputContainer}>
-          <Text style={[
-            styles.label,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            Email *
-          </Text>
-          <View style={styles.iconInput}>
-            <Mail size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
+        <Pressable 
+          style={[styles.saveButton, { opacity: loading ? 0.6 : 1 }]} 
+          onPress={handleSave}
+          disabled={loading}
+        >
+          <Save size={20} color="#007AFF" />
+        </Pressable>
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Speaker Info */}
+        <View style={[styles.section, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
+          <View style={styles.sectionHeader}>
+            <User size={24} color="#007AFF" />
+            <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+              Speaker Information
+            </Text>
+          </View>
+          
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+              Full Name *
+            </Text>
             <TextInput
               style={[
                 styles.input,
                 { 
                   backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
-                  color: isDark ? '#FFFFFF' : '#000000',
+                  color: isDark ? '#FFFFFF' : '#000000'
                 }
               ]}
-              placeholder="Enter email address"
+              placeholder="Enter speaker's full name"
               placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={formData.email}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
+              value={speakerName}
+              onChangeText={setSpeakerName}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleSave}
             />
-          </View>
-          {errors.email && (
-            <Text style={styles.errorText}>{errors.email}</Text>
-          )}
-        </View>
-        
-        {/* Role and Company */}
-        <View style={styles.row}>
-          <View style={[styles.inputContainer, styles.flex1]}>
-            <Text style={[
-              styles.label,
-              { color: isDark ? '#FFFFFF' : '#000000' }
-            ]}>
-              Role *
+            <Text style={[styles.helpText, { color: isDark ? '#8E8E93' : '#8E8E93' }]}>
+              Examples: "Dr. María González", "Ing. Carlos Pérez", "Ana Torres"
             </Text>
-            <View style={styles.iconInput}>
-              <Briefcase size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
-              <TextInput
-                style={[
-                  styles.input,
-                  { 
-                    backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
-                    color: isDark ? '#FFFFFF' : '#000000',
-                  }
-                ]}
-                placeholder="Enter role"
-                placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-                value={formData.role}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, role: text }))}
-              />
-            </View>
-            {errors.role && (
-              <Text style={styles.errorText}>{errors.role}</Text>
-            )}
-          </View>
-          
-          <View style={[styles.inputContainer, styles.flex1]}>
-            <Text style={[
-              styles.label,
-              { color: isDark ? '#FFFFFF' : '#000000' }
-            ]}>
-              Company
-            </Text>
-            <View style={styles.iconInput}>
-              <Award size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
-              <TextInput
-                style={[
-                  styles.input,
-                  { 
-                    backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
-                    color: isDark ? '#FFFFFF' : '#000000',
-                  }
-                ]}
-                placeholder="Enter company"
-                placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-                value={formData.company}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, company: text }))}
-              />
-            </View>
           </View>
         </View>
-        
-        {/* Bio */}
-        <View style={styles.inputContainer}>
-          <Text style={[
-            styles.label,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            Bio *
+
+        {/* Quick Add Notice */}
+        <View style={[styles.noticeSection, { backgroundColor: 'rgba(0, 122, 255, 0.1)' }]}>
+          <Text style={[styles.noticeTitle, { color: '#007AFF' }]}>
+            🚀 Quick Add
           </Text>
-          <TextInput
+          <Text style={[styles.noticeText, { color: '#007AFF' }]}>
+            You can add more details later by editing the speaker profile.
+          </Text>
+        </View>
+
+        {/* Save Button */}
+        <View style={styles.buttonContainer}>
+          <Pressable 
             style={[
-              styles.input,
-              styles.textArea,
+              styles.primaryButton,
               { 
-                backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
-                color: isDark ? '#FFFFFF' : '#000000',
+                backgroundColor: loading ? '#999999' : '#007AFF',
+                opacity: !speakerName.trim() ? 0.5 : 1
               }
-            ]}
-            placeholder="Enter professional bio"
-            placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-            multiline
-            numberOfLines={4}
-            value={formData.bio}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, bio: text }))}
-          />
-          {errors.bio && (
-            <Text style={styles.errorText}>{errors.bio}</Text>
-          )}
+            ]} 
+            onPress={handleSave}
+            disabled={loading || !speakerName.trim()}
+          >
+            <Text style={styles.primaryButtonText}>
+              {loading ? 'Creating...' : 'Create Speaker'}
+            </Text>
+          </Pressable>
         </View>
-        
-        {/* Expertise */}
-        <View style={styles.inputContainer}>
-          <Text style={[
-            styles.label,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            Areas of Expertise *
-          </Text>
-          <View style={styles.expertiseContainer}>
-            {expertiseAreas.map(expertise => (
-              <Pressable
-                key={expertise}
-                style={[
-                  styles.expertiseChip,
-                  { 
-                    backgroundColor: formData.expertise.includes(expertise)
-                      ? '#0A84FF'
-                      : isDark ? '#2C2C2E' : '#F2F2F7'
-                  }
-                ]}
-                onPress={() => toggleExpertise(expertise)}
-              >
-                <Text style={[
-                  styles.expertiseChipText,
-                  { 
-                    color: formData.expertise.includes(expertise)
-                      ? '#FFFFFF'
-                      : isDark ? '#FFFFFF' : '#000000'
-                  }
-                ]}>
-                  {expertise}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          {errors.expertise && (
-            <Text style={styles.errorText}>{errors.expertise}</Text>
-          )}
-        </View>
-        
-        {errors.submit && (
-          <Text style={[styles.errorText, styles.submitError]}>
-            {errors.submit}
-          </Text>
-        )}
-        
-        {/* Submit Button */}
-        <Pressable
-          style={styles.submitButton}
-          onPress={handleSubmit}
-        >
-          <Text style={styles.submitButtonText}>
-            Create Speaker
-          </Text>
-        </Pressable>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -321,101 +211,88 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  contentContainer: {
-    padding: 16,
-  },
-  formContainer: {
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  profileImagePlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    alignSelf: 'center',
-    marginBottom: 24,
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
   },
-  profileImageInitials: {
-    fontSize: 24,
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
     fontWeight: '600',
-    textAlign: 'center',
   },
-  inputContainer: {
+  saveButton: {
+    padding: 8,
+  },
+  content: {
+    flex: 1,
+  },
+  section: {
+    margin: 16,
+    padding: 24,
+    borderRadius: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 12,
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+  },
+  field: {
     marginBottom: 16,
   },
   label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
+    fontSize: 18,
+    fontWeight: '500',
+    marginBottom: 12,
   },
   input: {
-    height: 44,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 16,
-    flex: 1,
-  },
-  textArea: {
-    height: 100,
-    paddingTop: 12,
-    paddingBottom: 12,
-    textAlignVertical: 'top',
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  flex1: {
-    flex: 1,
-  },
-  iconInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#2C2C2E',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-  },
-  expertiseContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  expertiseChip: {
+    height: 52,
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    fontSize: 18,
+    marginBottom: 8,
   },
-  expertiseChipText: {
+  helpText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontStyle: 'italic',
   },
-  errorText: {
-    color: '#FF453A',
+  noticeSection: {
+    margin: 16,
+    marginTop: 8,
+    padding: 16,
+    borderRadius: 12,
+  },
+  noticeTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  noticeText: {
     fontSize: 14,
-    marginTop: 4,
+    lineHeight: 20,
   },
-  submitError: {
-    textAlign: 'center',
-    marginBottom: 16,
+  buttonContainer: {
+    margin: 16,
+    marginTop: 8,
   },
-  submitButton: {
-    backgroundColor: '#0A84FF',
-    height: 50,
-    borderRadius: 25,
+  primaryButton: {
+    height: 52,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  submitButtonText: {
+  primaryButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
   },
 });

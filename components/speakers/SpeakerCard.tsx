@@ -1,273 +1,327 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, useColorScheme, Image, Dimensions } from 'react-native';
-import { Linkedin, Twitter, Globe, ExternalLink } from 'lucide-react-native';
+import { View, Text, StyleSheet, Pressable, useColorScheme, ActivityIndicator, Platform, Dimensions } from 'react-native';
+import { router } from 'expo-router';
+import { Edit, Trash2 } from 'lucide-react-native';
 
-const { width } = Dimensions.get('window');
-const isTablet = width >= 768;
-
-type SpeakerCardProps = {
+interface SpeakerCardProps {
   speaker: {
     id: string;
     name: string;
-    role: string;
-    company: string;
-    bio: string;
-    expertise: string[];
+    company?: string;
+    role?: string;
+    email?: string;
+    phone?: string;
+    bio?: string;
+    expertise?: string[];
+    social?: any;
+    rating?: number;
     imageUrl?: string;
-    social?: {
-      linkedin?: string;
-      twitter?: string;
-      website?: string;
-    };
   };
-  onPress: () => void;
-};
+  onPress?: () => void;
+  onDelete?: () => void;
+  isGridView?: boolean;
+  isNewOptimistic?: boolean;
+  isUpdatedOptimistic?: boolean;
+  isBeingDeleted?: boolean;
+  screenWidth?: number;
+  numColumns?: number;
+}
 
-export function SpeakerCard({ speaker, onPress }: SpeakerCardProps) {
+export function SpeakerCard({ 
+  speaker, 
+  onPress, 
+  onDelete, 
+  isGridView = false, 
+  isNewOptimistic = false, 
+  isUpdatedOptimistic = false,
+  isBeingDeleted = false,
+  screenWidth = Dimensions.get('window').width,
+  numColumns = 1
+}: SpeakerCardProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+
+  // ✅ CONFIGURACIÓN RESPONSIVA
+  const isTablet = screenWidth >= 768;
+  const isDesktop = screenWidth >= 1024;
+  const isSmallMobile = screenWidth < 375;
+
+  const handleEditPress = () => {
+    router.push(`/(tabs)/speakers/edit/${speaker.id}`);
+  };
+
+  const handleDeletePress = () => {
+    console.log('🗑️ Delete button pressed for speaker:', speaker.name);
+    if (onDelete) {
+      onDelete();
+    } else {
+      console.warn('⚠️ onDelete function not provided to SpeakerCard');
+    }
+  };
+
+  // ✅ MEJORAR CÁLCULO DE ESTILOS DEL CARD
+  const getCardStyles = () => {
+    if (!isGridView) {
+      return {
+        width: '100%',
+        marginHorizontal: 0,
+        marginBottom: isSmallMobile ? 8 : 12,
+      };
+    }
+
+    // ✅ CÁLCULO MÁS PRECISO PARA GRID
+    const horizontalMargin = 6; // Aumentar ligeramente el margen
+    const maxWidth = numColumns === 4 ? '23%' : 
+                     numColumns === 3 ? '31%' : 
+                     numColumns === 2 ? '47%' : '100%';
+
+    return {
+      flex: 1,
+      marginHorizontal: horizontalMargin,
+      marginBottom: isSmallMobile ? 10 : 14,
+      maxWidth,
+      minHeight: isDesktop ? 180 : isTablet ? 160 : 140, // ✅ ALTURA MÍNIMA CONSISTENTE
+    };
+  };
+
+  const cardStyles = getCardStyles();
 
   return (
     <Pressable
       style={[
-        styles.card,
+        styles.container,
         { 
           backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
-          width: isTablet ? '48%' : '100%'
+          borderWidth: (isNewOptimistic || isUpdatedOptimistic) ? 2 : 0,
+          borderColor: isNewOptimistic ? '#007AFF' : isUpdatedOptimistic ? '#34C759' : 'transparent',
+          opacity: isBeingDeleted ? 0.5 : 1,
+          borderRadius: isSmallMobile ? 10 : 14, // ✅ BORDES MÁS REDONDEADOS
+          ...cardStyles,
         }
       ]}
       onPress={onPress}
     >
-      <View style={styles.header}>
-        {speaker.imageUrl ? (
-          <Image
-            source={{ uri: speaker.imageUrl }}
-            style={styles.avatar}
-            resizeMode="cover"
-            accessibilityLabel={`Profile photo of ${speaker.name}`}
-          />
-        ) : (
-          <View style={[
-            styles.avatarPlaceholder,
-            { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
+      {/* ✅ BADGES CON MEJOR POSICIONAMIENTO */}
+      {(isNewOptimistic || isUpdatedOptimistic || isBeingDeleted) && (
+        <View style={[
+          styles.badge, 
+          { 
+            backgroundColor: isNewOptimistic ? '#007AFF' : 
+                            isUpdatedOptimistic ? '#34C759' : '#FF3B30',
+            paddingHorizontal: isSmallMobile ? 6 : 8,
+            paddingVertical: isSmallMobile ? 3 : 4,
+            borderRadius: isSmallMobile ? 10 : 12,
+            top: 10,
+            right: 10,
+          }
+        ]}>
+          <Text style={[
+            styles.badgeText,
+            { fontSize: isSmallMobile ? 9 : 11 }
           ]}>
-            <Text style={[
-              styles.avatarInitials,
-              { color: isDark ? '#FFFFFF' : '#000000' }
-            ]}>
-              {speaker.name.split(' ').map(n => n[0]).join('')}
-            </Text>
-          </View>
-        )}
-        
-        <View style={styles.headerInfo}>
+            {isNewOptimistic ? '✨ New' : 
+             isUpdatedOptimistic ? '⚡ Updated' : '🗑️ Deleting'}
+          </Text>
+        </View>
+      )}
+
+      <View style={[
+        styles.content,
+        {
+          padding: isSmallMobile ? 14 : isTablet ? 18 : 16,
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flex: 1, // ✅ USAR TODO EL ESPACIO DISPONIBLE
+        }
+      ]}>
+        {/* ✅ AVATAR MEJORADO */}
+        <View style={[
+          styles.avatar,
+          { 
+            backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+            width: isSmallMobile ? 50 : isTablet ? 65 : 58,
+            height: isSmallMobile ? 50 : isTablet ? 65 : 58,
+            borderRadius: isSmallMobile ? 25 : isTablet ? 32.5 : 29,
+            marginBottom: 12,
+            // ✅ AGREGAR SOMBRA SUTIL
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 4,
+            elevation: 3,
+          }
+        ]}>
+          <Text style={[
+            styles.avatarText,
+            { 
+              color: isDark ? '#FFFFFF' : '#000000',
+              fontSize: isSmallMobile ? 20 : isTablet ? 26 : 23,
+            }
+          ]}>
+            {speaker.name?.charAt(0)?.toUpperCase() || 'S'}
+          </Text>
+        </View>
+
+        {/* ✅ INFO SECTION MEJORADA */}
+        <View style={[
+          styles.info,
+          {
+            alignItems: 'center',
+            width: '100%',
+            flex: 1,
+            justifyContent: 'center',
+          }
+        ]}>
           <Text 
             style={[
               styles.name,
-              { color: isDark ? '#FFFFFF' : '#000000' }
+              { 
+                color: isDark ? '#FFFFFF' : '#000000',
+                fontSize: isSmallMobile ? 13 : isTablet ? 16 : 14,
+                textAlign: 'center',
+                lineHeight: isSmallMobile ? 16 : isTablet ? 20 : 18,
+                marginBottom: 6,
+              }
             ]}
-            numberOfLines={1}
+            numberOfLines={2}
           >
-            {speaker.name}
+            {speaker.name || 'Unknown Speaker'}
           </Text>
+          
+          {speaker.company && (
+            <Text 
+              style={[
+                styles.company,
+                { 
+                  color: isDark ? '#8E8E93' : '#3C3C43',
+                  fontSize: isSmallMobile ? 11 : isTablet ? 13 : 12,
+                  textAlign: 'center',
+                  marginBottom: 3,
+                }
+              ]}
+              numberOfLines={1}
+            >
+              {speaker.company}
+            </Text>
+          )}
           
           <Text 
             style={[
               styles.role,
-              { color: isDark ? '#EBEBF5' : '#3C3C43' }
+              { 
+                color: isDark ? '#8E8E93' : '#3C3C43',
+                fontSize: isSmallMobile ? 10 : isTablet ? 12 : 11,
+                textAlign: 'center',
+                opacity: 0.8,
+              }
             ]}
             numberOfLines={1}
           >
-            {speaker.role}
-          </Text>
-          
-          <Text 
-            style={[
-              styles.company,
-              { color: isDark ? '#8E8E93' : '#6C6C70' }
-            ]}
-            numberOfLines={1}
-          >
-            {speaker.company}
+            {speaker.role || 'Speaker'}
           </Text>
         </View>
-      </View>
 
-      <Text 
-        style={[
-          styles.bio,
-          { color: isDark ? '#EBEBF5' : '#3C3C43' }
-        ]}
-        numberOfLines={3}
-      >
-        {speaker.bio}
-      </Text>
+        {/* ✅ ACTIONS CON MEJOR ESPACIADO */}
+        <View style={[
+          styles.actions,
+          {
+            flexDirection: 'row',
+            gap: isSmallMobile ? 6 : 10,
+            marginTop: 8,
+            justifyContent: 'center',
+          }
+        ]}>
+          {isBeingDeleted ? (
+            <ActivityIndicator size="small" color="#FF3B30" />
+          ) : (
+            <>
+              <Pressable
+                style={[
+                  styles.actionButton,
+                  { 
+                    backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+                    width: isSmallMobile ? 30 : isTablet ? 38 : 34,
+                    height: isSmallMobile ? 30 : isTablet ? 38 : 34,
+                    borderRadius: isSmallMobile ? 15 : isTablet ? 19 : 17,
+                  }
+                ]}
+                onPress={handleEditPress}
+              >
+                <Edit size={isSmallMobile ? 14 : isTablet ? 18 : 16} color="#007AFF" />
+              </Pressable>
 
-      <View style={styles.expertiseContainer}>
-        {speaker.expertise.map((item, index) => (
-          <View
-            key={index}
-            style={[
-              styles.expertiseTag,
-              { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
-            ]}
-          >
-            <Text
-              style={[
-                styles.expertiseText,
-                { color: isDark ? '#FFFFFF' : '#000000' }
-              ]}
-            >
-              {item}
-            </Text>
-          </View>
-        ))}
-      </View>
-
-      {speaker.social && (
-        <View style={styles.socialLinks}>
-          {speaker.social.linkedin && (
-            <Pressable
-              style={[
-                styles.socialButton,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
-              ]}
-              onPress={() => {/* Open LinkedIn */}}
-              accessibilityLabel={`${speaker.name}'s LinkedIn profile`}
-            >
-              <Linkedin size={18} color={isDark ? '#FFFFFF' : '#000000'} />
-            </Pressable>
-          )}
-          
-          {speaker.social.twitter && (
-            <Pressable
-              style={[
-                styles.socialButton,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
-              ]}
-              onPress={() => {/* Open Twitter */}}
-              accessibilityLabel={`${speaker.name}'s Twitter profile`}
-            >
-              <Twitter size={18} color={isDark ? '#FFFFFF' : '#000000'} />
-            </Pressable>
-          )}
-          
-          {speaker.social.website && (
-            <Pressable
-              style={[
-                styles.socialButton,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
-              ]}
-              onPress={() => {/* Open Website */}}
-              accessibilityLabel={`${speaker.name}'s website`}
-            >
-              <Globe size={18} color={isDark ? '#FFFFFF' : '#000000'} />
-            </Pressable>
+              <Pressable
+                style={[
+                  styles.actionButton,
+                  { 
+                    backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+                    width: isSmallMobile ? 30 : isTablet ? 38 : 34,
+                    height: isSmallMobile ? 30 : isTablet ? 38 : 34,
+                    borderRadius: isSmallMobile ? 15 : isTablet ? 19 : 17,
+                  }
+                ]}
+                onPress={handleDeletePress}
+              >
+                <Trash2 size={isSmallMobile ? 14 : isTablet ? 18 : 16} color="#FF3B30" />
+              </Pressable>
+            </>
           )}
         </View>
-      )}
-
-      <View style={styles.viewProfileContainer}>
-        <Text style={styles.viewProfileText}>
-          View Profile
-        </Text>
-        <ExternalLink size={16} color="#0A84FF" />
       </View>
     </Pressable>
   );
 }
 
+// ✅ ESTILOS MEJORADOS
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+  container: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 3,
     elevation: 3,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+        transition: 'all 0.2s ease', // ✅ ANIMACIÓN SUAVE EN WEB
+      },
+    }),
   },
-  header: {
-    flexDirection: 'row',
-    marginBottom: 12,
+  badge: {
+    position: 'absolute',
+    zIndex: 1,
   },
+  badgeText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  content: {},
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginRight: 16,
-  },
-  avatarPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginRight: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitials: {
-    fontSize: 24,
-    fontWeight: '600',
+  avatarText: {
+    fontWeight: '700', // ✅ MÁS BOLD
   },
-  headerInfo: {
-    flex: 1,
-    justifyContent: 'center',
-  },
+  info: {},
   name: {
-    fontSize: 20,
     fontWeight: '600',
-    marginBottom: 4,
   },
-  role: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  company: {
-    fontSize: 14,
-  },
-  bio: {
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 12,
-  },
-  expertiseContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  expertiseTag: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  expertiseText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  socialLinks: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
-  socialButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  company: {},
+  role: {},
+  actions: {},
+  actionButton: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  viewProfileContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  viewProfileText: {
-    color: '#0A84FF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginRight: 4,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+        transition: 'all 0.15s ease',
+      },
+    }),
   },
 });

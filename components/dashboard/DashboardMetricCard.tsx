@@ -34,6 +34,7 @@ export function DashboardMetricCard({
         }
       ]}
       onPress={onPress}
+      android_ripple={{ color: isDark ? '#333333' : '#E0E0E0' }}
     >
       <View style={styles.iconContainer}>
         {icon}
@@ -45,8 +46,11 @@ export function DashboardMetricCard({
           { color: isDark ? '#FFFFFF' : '#000000' }
         ]}
         numberOfLines={1}
+        adjustsFontSizeToFit
       >
-        {value}
+        {typeof value === 'number' && value > 999 
+          ? `${(value / 1000).toFixed(1)}k` 
+          : value}
       </Text>
       
       <Text
@@ -59,23 +63,23 @@ export function DashboardMetricCard({
         {title}
       </Text>
       
-      {trend !== undefined && (
+      {trend !== undefined && trend !== 0 && (
         <View style={styles.trendContainer}>
           {trend > 0 ? (
             <>
               <TrendingUp size={12} color="#30D158" />
               <Text style={[styles.trendText, styles.trendPositive]}>
-                {trend}%
+                +{trend}%
               </Text>
             </>
-          ) : trend < 0 ? (
+          ) : (
             <>
               <TrendingDown size={12} color="#FF453A" />
               <Text style={[styles.trendText, styles.trendNegative]}>
-                {Math.abs(trend)}%
+                {trend}%
               </Text>
             </>
-          ) : null}
+          )}
         </View>
       )}
     </Pressable>
@@ -93,6 +97,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    minHeight: 120,
   },
   iconContainer: {
     marginBottom: 12,
