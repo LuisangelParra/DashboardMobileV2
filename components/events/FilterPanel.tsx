@@ -1,20 +1,30 @@
-import React from 'react';
-import { View, Text, Pressable, useColorScheme } from 'react-native';
-import { Filter } from 'lucide-react-native';
-import styles from './events.styles';
-import { EventCategory } from '@/types';
+// components/events/FilterPanel.tsx
+import React from 'react'
+import { View, Text, Pressable, useColorScheme } from 'react-native'
+import { Filter } from 'lucide-react-native'
+import styles from './events.styles'
+import { EventCategory } from '@/types'
 
 interface Props {
-  visible: boolean;
-  onToggle: () => void;
-  categories: EventCategory[];
-  selected: EventCategory | null;
-  onSelect: (c: EventCategory | null) => void;
+  visible: boolean
+  onToggle: () => void
+  tracks: EventCategory[]            // todos los tracks disponibles
+  selected: EventCategory[]          // los tracks actualmente seleccionados
+  onToggleTrack: (track: EventCategory) => void
+  onClear: () => void
 }
 
-export function FilterPanel({ visible, onToggle, categories, selected, onSelect }: Props) {
-  const isDark = useColorScheme() === 'dark';
+export function FilterPanel({
+  visible,
+  onToggle,
+  tracks,
+  selected,
+  onToggleTrack,
+  onClear
+}: Props) {
+  const isDark = useColorScheme() === 'dark'
 
+  // Si no está visible, mostramos solo el icono de filtro
   if (!visible) {
     return (
       <Pressable
@@ -23,41 +33,51 @@ export function FilterPanel({ visible, onToggle, categories, selected, onSelect 
       >
         <Filter size={20} color={isDark ? '#FFFFFF' : '#000000'} />
       </Pressable>
-    );
+    )
   }
 
+  // Panel abierto con todos los tracks como chips
   return (
     <View style={[styles.filtersContainer, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
       <View style={styles.filterHeader}>
         <Text style={[styles.filterTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-          Filter by Category
+          Filtrar por Track
         </Text>
-        <Pressable onPress={() => onSelect(null)} style={styles.clearFilterButton}>
-          <Text style={styles.clearFilterText}>Clear</Text>
+        <Pressable onPress={onClear} style={styles.clearFilterButton}>
+          <Text style={styles.clearFilterText}>Limpiar</Text>
         </Pressable>
       </View>
 
       <View style={styles.categoriesContainer}>
-        {categories.map(cat => (
-          <Pressable
-            key={cat}
-            style={[
-              styles.categoryChip,
-              { backgroundColor: selected === cat ? '#0A84FF' : isDark ? '#2C2C2E' : '#E5E5EA' }
-            ]}
-            onPress={() => onSelect(selected === cat ? null : cat)}
-          >
-            <Text
+        {tracks.map(track => {
+          const isSelected = selected.includes(track)
+          return (
+            <Pressable
+              key={track}
               style={[
-                styles.categoryChipText,
-                { color: selected === cat ? '#FFFFFF' : isDark ? '#FFFFFF' : '#000000' }
+                styles.categoryChip,
+                {
+                  backgroundColor: isSelected
+                    ? '#0A84FF'
+                    : isDark ? '#2C2C2E' : '#E5E5EA'
+                }
               ]}
+              onPress={() => onToggleTrack(track)}
             >
-              {cat}
-            </Text>
-          </Pressable>
-        ))}
+              <Text
+                style={[
+                  styles.categoryChipText,
+                  {
+                    color: isSelected ? '#FFFFFF' : isDark ? '#FFFFFF' : '#000000'
+                  }
+                ]}
+              >
+                {track}
+              </Text>
+            </Pressable>
+          )
+        })}
       </View>
     </View>
-  );
+  )
 }
