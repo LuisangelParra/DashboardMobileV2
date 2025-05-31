@@ -1,76 +1,164 @@
 // hooks/useEvents.ts
+import { useState, useEffect, useCallback } from 'react'
 import Constants from 'expo-constants'
-import { useState, useEffect } from 'react'
 import { Event, EventCategory } from '@/types'
 
-const { UNIDB_BASE_URL, UNIDB_CONTRACT_KEY } = Constants.manifest!.extra as Record<string,string>
-const API_BASE = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`
+const {
+  UNIDB_BASE_URL,
+  UNIDB_CONTRACT_KEY
+} = (Constants.expoConfig!.extra as {
+  UNIDB_BASE_URL: string
+  UNIDB_CONTRACT_KEY: string
+})
+const BASE_URL = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`
 
-type EventsParams = {
-  search?: string
-  category?: EventCategory | null
+type RawRow<T> = { entry_id: string; data: T }
+
+type RawEvent = {
+  id: number
+  titulo: string
+  descripcion: string
+  tema: string
+  ponente_id: number
+  fecha: string       // "YYYY-MM-DD"
+  hora_inicio: string // "HH:MM"
+  hora_fin: string    // "HH:MM"
+  max_participantes: number
+  suscritos: number
+  lugar: string       // <–– corregido aquí
+  imageUrl: string
 }
 
-export function useEvents(params: EventsParams = {}) {
-  const [events, setEvents]       = useState<Event[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError]         = useState<string | null>(null)
+type RawFeedback = {
+  id: number
+  event_id: number
+  rating: number
+  comment: string
+  created_at?: string
+}
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true)
-      setError(null)
-      try {
-        // 1) Llamada al API
-        const res = await fetch(
-          `${API_BASE}/data/events/all?format=json`
+type RawTrack = {
+  id: number
+  nombre: string
+}
+
+type RawEventTrack = {
+  event_id: number
+  track_id: number
+}
+
+export function useEvents(params: {
+  search?: string
+  category?: EventCategory | null
+} = {}) {
+  const [events, setEvents] = useState<Event[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  const fetchAll = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      // 1) Leer todos los eventos
+      const resE = await fetch(`${BASE_URL}/data/events/all?format=json`)
+      const { data: rawE } = (await resE.json()) as { data: RawRow<RawEvent>[] }
+
+      // 2) Leer todos los feedbacks
+      const resF = await fetch(`${BASE_URL}/data/feedbacks/all?format=json`)
+      const { data: rawF } = (await resF.json()) as { data: RawRow<RawFeedback>[] }
+
+      // 3) Leer todos los tracks
+      const resT = await fetch(`${BASE_URL}/data/tracks/all?format=json`)
+      const { data: rawT } = (await resT.json()) as { data: RawRow<RawTrack>[] }
+
+      // 4) Leer todas las relaciones event_tracks
+      const resET = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`)
+      const { data: rawET } = (await resET.json()) as { data: RawRow<RawEventTrack>[] }
+
+      // 5) Agrupar feedbacks por event_id
+      const feedbackByEvent: Record<number, RawFeedback[]> = {}
+      rawF.forEach(r => {
+        const fb = r.data
+        if (!feedbackByEvent[fb.event_id]) feedbackByEvent[fb.event_id] = []
+        feedbackByEvent[fb.event_id].push(fb)
+      })
+
+      // 6) Crear un mapa de trackId → nombre
+      const trackMap: Record<number, string> = {}
+      rawT.forEach(r => {
+        trackMap[r.data.id] = r.data.nombre
+      })
+
+      // 7) Agrupar track IDs por event_id
+      const tracksByEvent: Record<number, number[]> = {}
+      rawET.forEach(r => {
+        const { event_id, track_id } = r.data
+        if (!tracksByEvent[event_id]) tracksByEvent[event_id] = []
+        tracksByEvent[event_id].push(track_id)
+      })
+
+      // 8) Mapear cada evento crudo a nuestro tipo Event (incluyendo cálculo de rating y asignar `location` = e.lugar)
+      const mapped = rawE.map(r => {
+        const e = r.data
+        const fList = feedbackByEvent[e.id] || []
+        const count = fList.length
+        const avg = count > 0
+          ? fList.reduce((sum, x) => sum + x.rating, 0) / count
+          : 0
+
+        // Obtener lista de nombres de tracks para este evento
+        const trackIds = tracksByEvent[e.id] || []
+        const trackNames = trackIds
+          .map(tid => trackMap[tid])
+          .filter((n): n is EventCategory => !!n)
+
+        return {
+          id: String(e.id),
+          name: e.titulo,
+          description: e.descripcion,
+          category: e.tema as EventCategory,
+          date: new Date(e.fecha).toLocaleDateString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+          }),
+          time: `${e.hora_inicio} - ${e.hora_fin}`,
+          location: e.lugar,       // <–– aquí usamos “lugar”
+          imageUrl: e.imageUrl,
+          rating: avg,
+          ratingCount: count,
+          tracks: trackNames     // <–– arreglo de EventCategory basado en la tabla event_tracks ↔ tracks
+        }
+      })
+
+      // 9) Aplicar filtros de búsqueda y categoría (tracks)
+      let filtered = mapped
+      if (params.search) {
+        const q = params.search.toLowerCase()
+        filtered = filtered.filter(ev =>
+          ev.name.toLowerCase().includes(q) ||
+          ev.description.toLowerCase().includes(q)
         )
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const body = await res.json()
-        const raw: { entry_id: string; data: any }[] = body.data
-
-        const mapped: Event[] = raw.map(({ entry_id, data }) => ({
-          id:            String(data.id),               // ← usa data.id, no entry_id
-          name:          data.titulo,
-          description:   data.descripcion,
-          category:      (['Workshop','Presentation','Panel','Networking','Other'] as string[])
-                          .includes(data.tema)
-                          ? (data.tema as EventCategory)
-                          : 'Other',
-          date:          data.fecha,
-          time:          data.hora_inicio && data.hora_fin
-                            ? `${data.hora_inicio} - ${data.hora_fin}`
-                            : '',
-          location:      data.lugar  ?? '',
-          imageUrl:      data.imageUrl ?? '',
-          rating:        Number(data.rating)      || 0,
-          ratingCount:   Number(data.ratingCount) || 0,
-        }))
-
-        // 3) Filtros cliente (search + category)
-        let filtered = mapped
-        if (params.search) {
-          const term = params.search.toLowerCase()
-          filtered = filtered.filter(e =>
-            e.name.toLowerCase().includes(term) ||
-            e.description.toLowerCase().includes(term)
-          )
-        }
-        if (params.category) {
-          filtered = filtered.filter(e => e.category === params.category)
-        }
-
-        setEvents(filtered)
-      } catch (e: any) {
-        console.error(e)
-        setError(e.message ?? 'Error fetching events')
-      } finally {
-        setIsLoading(false)
       }
-    }
+      if (params.category) {
+        filtered = filtered.filter(ev =>
+          ev.tracks.includes(params.category!)
+        )
+      }
 
-    fetchData()
+      setEvents(filtered)
+    } catch (err) {
+      console.error('useEvents error:', err)
+    } finally {
+      setIsLoading(false)
+    }
   }, [params.search, params.category])
 
-  return { events, isLoading, error }
+  useEffect(() => {
+    fetchAll()
+  }, [fetchAll])
+
+  return {
+    events,
+    isLoading,
+    refresh: fetchAll
+  }
 }

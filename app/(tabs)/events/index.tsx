@@ -1,403 +1,222 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, useColorScheme, TextInput, ActivityIndicator } from 'react-native';
+// app/(tabs)/events/index.tsx
+
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  View,
+  FlatList,
+  ActivityIndicator,
+  Text,
+  useColorScheme,
+  TextInput,
+  Pressable
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { Search, Plus, Filter, ChevronDown, Calendar, MapPin } from 'lucide-react-native';
+import { Search, Plus, Filter } from 'lucide-react-native';
+import styles from '@/components/events/events.styles';
 import { useEvents } from '@/hooks/useEvents';
-import { EventCategory } from '@/types';
-import { CategoryBadge } from '@/components/events/CategoryBadge';
+import { EventCard } from '@/components/events/EventCard';
+import Constants from 'expo-constants';
+
+const {
+  UNIDB_BASE_URL,
+  UNIDB_CONTRACT_KEY
+} = (Constants.expoConfig!.extra as {
+  UNIDB_BASE_URL: string;
+  UNIDB_CONTRACT_KEY: string;
+});
+const BASE_URL = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`;
+
+// Tipos para raw
+type RawRow<T> = { entry_id: string; data: T };
+type RawTrack = { id: number; nombre: string };
+type RawEventTrack = { event_id: number; track_id: number };
 
 export default function EventsScreen() {
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<EventCategory | null>(null);
+  const isFocused = useIsFocused();
+  const isDark = useColorScheme() === 'dark';
+
+  const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  
-  const { events, isLoading } = useEvents({
-    search: searchQuery,
-    category: selectedCategory,
-  });
+  // tracks seleccionados (multi-select)
+  const [selectedTracks, setSelectedTracks] = useState<string[]>([]);
 
-  const renderEvent = ({ item }) => (
-    <Pressable
-      style={[
-        styles.eventCard,
-        { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
-      ]}
-      onPress={() => router.push(`/events/${item.id}`)}
-    >
-      <View style={styles.eventHeader}>
-        <Text 
-          style={[
-            styles.eventName, 
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}
-          numberOfLines={1}
-        >
-          {item.name}
-        </Text>
-        <CategoryBadge category={item.category} />
-      </View>
-      
-      <Text 
-        style={[
-          styles.eventDescription,
-          { color: isDark ? '#EBEBF5' : '#3C3C43' }
-        ]}
-        numberOfLines={2}
-      >
-        {item.description}
-      </Text>
-      
-      <View style={styles.eventMeta}>
-        <View style={styles.eventMetaItem}>
-          <Calendar size={14} color={isDark ? '#8E8E93' : '#3C3C43'} />
-          <Text 
-            style={[
-              styles.eventMetaText,
-              { color: isDark ? '#8E8E93' : '#3C3C43' }
-            ]}
-          >
-            {item.date}
-          </Text>
-        </View>
-        
-        <View style={styles.eventMetaItem}>
-          <MapPin size={14} color={isDark ? '#8E8E93' : '#3C3C43'} />
-          <Text 
-            style={[
-              styles.eventMetaText,
-              { color: isDark ? '#8E8E93' : '#3C3C43' }
-            ]}
-          >
-            {item.location}
-          </Text>
-        </View>
-      </View>
-      
-      <View style={styles.ratingContainer}>
-        <Text 
-          style={[
-            styles.ratingLabel,
-            { color: isDark ? '#8E8E93' : '#3C3C43' }
-          ]}
-        >
-          Rating:
-        </Text>
-        <View style={styles.ratingStars}>
-          {[1, 2, 3, 4, 5].map(star => (
-            <Text 
-              key={`${item.id}-star-${star}`}
-              style={[
-                styles.ratingStar,
-                { color: star <= item.rating ? '#FF9500' : isDark ? '#48484A' : '#E5E5EA' }
-              ]}
-            >
-              ★
-            </Text>
-          ))}
-          <Text 
-            style={[
-              styles.ratingValue,
-              { color: isDark ? '#EBEBF5' : '#3C3C43' }
-            ]}
-          >
-            ({item.rating.toFixed(1)})
-          </Text>
-        </View>
-      </View>
-    </Pressable>
-  );
+  // Lista de eventos (filtrada por search en useEvents)
+  const { events, isLoading: loadingEvents, refresh } = useEvents({ search, category: null });
 
-  const categories: EventCategory[] = [
-    'Workshop', 'Presentation', 'Panel', 'Networking', 'Other'
-  ];
+  // Traemos tabla tracks
+  const [tracks, setTracks] = useState<{ id: string; nombre: string }[]>([]);
+  const [loadingTracks, setLoadingTracks] = useState(true);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/data/tracks/all?format=json`);
+        const json = (await res.json()) as { data: RawRow<RawTrack>[] };
+        setTracks(json.data.map(r => ({
+          id: String(r.data.id),
+          nombre: r.data.nombre
+        })));
+      } catch (err) {
+        console.error('Error loading tracks', err);
+      } finally {
+        setLoadingTracks(false);
+      }
+    })();
+  }, []);
+
+  // Traemos relaciones event_tracks
+  const [eventTracks, setEventTracks] = useState<RawEventTrack[]>([]);
+  const [loadingRel, setLoadingRel] = useState(true);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`);
+        const json = (await res.json()) as { data: RawRow<RawEventTrack>[] };
+        setEventTracks(json.data.map(r => r.data));
+      } catch (err) {
+        console.error('Error loading event_tracks', err);
+      } finally {
+        setLoadingRel(false);
+      }
+    })();
+  }, []);
+
+  // Refresca al volver al foco
+  useEffect(() => {
+    if (isFocused) refresh();
+  }, [isFocused, refresh]);
+
+  // Mapa de evento → lista de track IDs
+  const eventTracksMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    eventTracks.forEach(r => {
+      const eid = String(r.event_id);
+      const tid = String(r.track_id);
+      if (!map[eid]) map[eid] = [];
+      map[eid].push(tid);
+    });
+    return map;
+  }, [eventTracks]);
+
+  // Aplica filtro por tracks seleccionados
+  const filteredEvents = useMemo(() => {
+    if (selectedTracks.length === 0) return events;
+    return events.filter(ev => {
+      const evT = eventTracksMap[ev.id] || [];
+      // si al menos uno coincide
+      return selectedTracks.some(tid => evT.includes(tid));
+    });
+  }, [events, selectedTracks, eventTracksMap]);
+
+  const handleToggleTrack = (trackId: string) => {
+    setSelectedTracks(prev =>
+      prev.includes(trackId)
+        ? prev.filter(id => id !== trackId)
+        : [...prev, trackId]
+    );
+  };
 
   return (
-    <View style={[
-      styles.container,
-      { backgroundColor: isDark ? '#000000' : '#F2F2F7' }
-    ]}>
+    <View style={[styles.container, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
+      {/* Search + Filter button */}
       <View style={styles.searchContainer}>
-        <View style={[
-          styles.searchInputContainer,
-          { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
-        ]}>
+        <View style={[styles.searchInputContainer, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}>
           <Search size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
           <TextInput
-            style={[
-              styles.searchInput,
-              { color: isDark ? '#FFFFFF' : '#000000' }
-            ]}
+            style={[styles.searchInput, { color: isDark ? '#FFF' : '#000' }]}
             placeholder="Search events..."
             placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
+            value={search}
+            onChangeText={setSearch}
           />
         </View>
-        
         <Pressable
-          style={[
-            styles.filterButton,
-            { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
-          ]}
-          onPress={() => setShowFilters(!showFilters)}
+          style={[styles.filterButton, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}
+          onPress={() => setShowFilters(v => !v)}
         >
-          <Filter size={20} color={isDark ? '#FFFFFF' : '#000000'} />
+          <Filter size={20} color={isDark ? '#FFF' : '#000'} />
         </Pressable>
       </View>
-      
+
+      {/* Panel de filtro por tracks */}
       {showFilters && (
-        <View style={[
-          styles.filtersContainer,
-          { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
-        ]}>
+        <View style={[styles.filtersContainer, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}>
           <View style={styles.filterHeader}>
-            <Text style={[
-              styles.filterTitle,
-              { color: isDark ? '#FFFFFF' : '#000000' }
-            ]}>
-              Filter by Category
+            <Text style={[styles.filterTitle, { color: isDark ? '#FFF' : '#000' }]}>
+              Filter by Track
             </Text>
-            <Pressable
-              onPress={() => setSelectedCategory(null)}
-              style={styles.clearFilterButton}
-            >
+            <Pressable onPress={() => setSelectedTracks([])} style={styles.clearFilterButton}>
               <Text style={styles.clearFilterText}>Clear</Text>
             </Pressable>
           </View>
-          
           <View style={styles.categoriesContainer}>
-            {categories.map(category => (
-              <Pressable
-                key={category}
-                style={[
-                  styles.categoryChip,
-                  { 
-                    backgroundColor: selectedCategory === category 
-                      ? '#0A84FF' 
-                      : isDark ? '#2C2C2E' : '#E5E5EA'
-                  }
-                ]}
-                onPress={() => setSelectedCategory(
-                  selectedCategory === category ? null : category
-                )}
-              >
-                <Text style={[
-                  styles.categoryChipText,
-                  { 
-                    color: selectedCategory === category 
-                      ? '#FFFFFF' 
-                      : isDark ? '#FFFFFF' : '#000000'
-                  }
-                ]}>
-                  {category}
-                </Text>
-              </Pressable>
-            ))}
+            {loadingTracks
+              ? <ActivityIndicator size="small" color="#0A84FF" />
+              : tracks.map(track => {
+                const selected = selectedTracks.includes(track.id);
+                return (
+                  <Pressable
+                    key={track.id}
+                    style={[
+                      styles.categoryChip,
+                      {
+                        backgroundColor: selected
+                          ? '#0A84FF'
+                          : isDark
+                            ? '#2C2C2E'
+                            : '#E5E5EA'
+                      }
+                    ]}
+                    onPress={() => handleToggleTrack(track.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryChipText,
+                        {
+                          color: selected ? '#FFF' : (isDark ? '#FFF' : '#000')
+                        }
+                      ]}
+                    >
+                      {track.nombre}
+                    </Text>
+                  </Pressable>
+                );
+              })
+            }
           </View>
         </View>
       )}
-      
-      {isLoading ? (
+
+      {/* Listado */}
+      {(loadingEvents || loadingRel) ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#0A84FF" />
         </View>
       ) : (
         <FlatList
-          data={events}
-          renderItem={renderEvent}
-          keyExtractor={(item, index) => `event-${index}-${item.id || 'no-id'}`}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: insets.bottom + 20 }
-          ]}
+          data={filteredEvents}
+          renderItem={({ item }) => <EventCard item={item} />}
+          keyExtractor={item => item.id}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
-              <Text style={[
-                styles.emptyText,
-                { color: isDark ? '#FFFFFF' : '#000000' }
-              ]}>
+              <Text style={[styles.emptyText, { color: isDark ? '#FFF' : '#000' }]}>
                 No events found
               </Text>
             </View>
           )}
         />
       )}
-      
+
+      {/* Botón + */}
       <Pressable
-        style={[
-          styles.addButton,
-          { bottom: insets.bottom + 16 }
-        ]}
+        style={[styles.addButton, { bottom: insets.bottom + 16 }]}
         onPress={() => router.push('/events/add')}
       >
-        <Plus size={24} color="#FFFFFF" />
+        <Plus size={24} color="#FFF" />
       </Pressable>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 8,
-  },
-  searchInputContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    height: 44,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
-  },
-  filterButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filtersContainer: {
-    marginHorizontal: 16,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
-  },
-  filterHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  filterTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  clearFilterButton: {
-    padding: 4,
-  },
-  clearFilterText: {
-    color: '#0A84FF',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  categoriesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  categoryChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  categoryChipText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  listContent: {
-    padding: 16,
-  },
-  eventCard: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  eventHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  eventName: {
-    fontSize: 18,
-    fontWeight: '600',
-    flex: 1,
-    marginRight: 8,
-  },
-  eventDescription: {
-    fontSize: 14,
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  eventMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  eventMetaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  eventMetaText: {
-    fontSize: 13,
-    marginLeft: 4,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  ratingLabel: {
-    fontSize: 13,
-    marginRight: 8,
-  },
-  ratingStars: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  ratingStar: {
-    fontSize: 16,
-    marginRight: 2,
-  },
-  ratingValue: {
-    fontSize: 13,
-    marginLeft: 4,
-  },
-  addButton: {
-    position: 'absolute',
-    right: 16,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#0A84FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  emptyText: {
-    fontSize: 16,
-    textAlign: 'center',
-  },
-});

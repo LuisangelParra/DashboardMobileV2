@@ -1,532 +1,339 @@
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Pressable, useColorScheme, Image } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
-import { Calendar, Clock, MapPin, ImagePlus, X } from 'lucide-react-native';
-import { EventCategory } from '@/types';
+// app/(tabs)/events/edit/[id].tsx
+
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  useColorScheme,
+  ActivityIndicator,
+  Alert
+} from 'react-native';
+import Constants from 'expo-constants';
+import { useLocalSearchParams, router } from 'expo-router';
 import { useEvent } from '@/hooks/useEvent';
+import styles from '@/components/events/edit/editEvent.styles';
+
+import { ImagePickerField } from '@/components/events/edit/ImagePickerField';
+import { TextField } from '@/components/events/edit/TextField';
+import { TextAreaField } from '@/components/events/edit/TextAreaField';
+import { CategorySelector } from '@/components/events/edit/CategorySelector';
+import { DateTimeFields } from '@/components/events/edit/DateTimeFields';
+import { LocationField } from '@/components/events/edit/LocationField';
+import { SubmitDeleteButtons } from '@/components/events/edit/SubmitDeleteButtons';
+
+import { EventCategory } from '@/types';
+
+const {
+  UNIDB_BASE_URL,
+  UNIDB_CONTRACT_KEY
+} = (Constants.expoConfig!.extra as {
+  UNIDB_BASE_URL: string;
+  UNIDB_CONTRACT_KEY: string;
+});
+const BASE_URL = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`;
+
+type RawRow<T> = { entry_id: string; data: T & Record<string, any> };
+type RawEvent = {
+  id: number;
+  titulo: string;
+  descripcion: string;
+  tema: string;
+  fecha: string;
+  hora_inicio: string;
+  hora_fin: string;
+  location: string;
+  imageUrl: string;
+  suscritos: number;
+  // plus any other fields
+};
+type RawEventSpeaker = { event_id: number; speaker_id: number };
+type RawEventTrack = { event_id: number; track_id: number };
 
 export default function EditEventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const { event, isLoading } = useEvent(id);
-  
+
+  const { event, isLoading: loadingEvent } = useEvent(id);
+  const [entryId, setEntryId] = useState<string>('');
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     category: '' as EventCategory,
     date: '',
-    time: '',
+    startTime: '',
+    endTime: '',
     location: '',
     imageUrl: '',
   });
-  
   const [errors, setErrors] = useState<Record<string, string>>({});
-  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // 1) Obtener el entry_id correspondiente en UniDB
   useEffect(() => {
-    if (event) {
-      setFormData({
-        name: event.name,
-        description: event.description,
-        category: event.category,
-        date: event.date,
-        time: event.time,
-        location: event.location,
-        imageUrl: event.imageUrl,
-      });
-    }
+    if (!id) return;
+    (async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/data/events/all?format=json`);
+        const json = (await res.json()) as { data: RawRow<RawEvent>[] };
+        const row = json.data.find(r => String(r.data.id) === id);
+        if (row) setEntryId(row.entry_id);
+      } catch (err) {
+        console.error('Error fetching entryId:', err);
+      }
+    })();
+  }, [id]);
+
+  // 2) Popula el formulario con los datos existentes
+  useEffect(() => {
+    if (!event) return;
+    const [startTime, endTime] = event.time.split(' - ');
+    setFormData({
+      name: event.name,
+      description: event.description,
+      category: event.category,
+      date: event.date,
+      startTime,
+      endTime,
+      location: event.location,
+      imageUrl: event.imageUrl,
+    });
   }, [event]);
-  
+
   const categories: EventCategory[] = [
-    'Workshop', 'Presentation', 'Panel', 'Networking', 'Other'
+    'Workshop',
+    'Presentation',
+    'Panel',
+    'Networking',
+    'Other',
   ];
 
+  // 3) Validación de formulario
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    
-    if (!formData.name.trim()) {
-      newErrors.name = 'Event name is required';
-    }
-    
-    if (!formData.description.trim()) {
-      newErrors.description = 'Description is required';
-    }
-    
-    if (!formData.category) {
-      newErrors.category = 'Category is required';
-    }
-    
-    if (!formData.date.trim()) {
-      newErrors.date = 'Date is required';
-    }
-    
-    if (!formData.time.trim()) {
-      newErrors.time = 'Time is required';
-    }
-    
-    if (!formData.location.trim()) {
-      newErrors.location = 'Location is required';
-    }
-    
-    if (!formData.imageUrl.trim()) {
-      newErrors.imageUrl = 'Image URL is required';
-    }
-    
+    if (!formData.name.trim()) newErrors.name = 'Event name is required';
+    if (!formData.description.trim()) newErrors.description = 'Description is required';
+    if (!formData.category) newErrors.category = 'Category is required';
+    if (!formData.date.trim()) newErrors.date = 'Date is required';
+    if (!formData.startTime.trim()) newErrors.startTime = 'Start time is required';
+    if (!formData.endTime.trim()) newErrors.endTime = 'End time is required';
+    if (!formData.location.trim()) newErrors.location = 'Location is required';
+    if (!formData.imageUrl.trim()) newErrors.imageUrl = 'Image URL is required';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
+  // 4) Al presionar “Save Changes”: recupero la fila original, la fusiono y hago PUT
   const handleSubmit = async () => {
-    if (!validateForm()) {
+    if (!validateForm()) return;
+    if (!entryId) {
+      setErrors({ submit: 'Unable to identify event in database.' });
       return;
     }
-    
+    setIsSubmitting(true);
     try {
-      // In a real app, this would be an API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Navigate back to event details
+      // a) Obtener datos crudos para conservar campos no editables
+      const resRow = await fetch(`${BASE_URL}/data/events/all?format=json`);
+      const { data: rows } = (await resRow.json()) as { data: RawRow<RawEvent>[] };
+      const row = rows.find(r => r.entry_id === entryId);
+      if (!row) throw new Error('Original event data not found');
+      const original = row.data;
+
+      // b) Fusionar los campos que sí se editaron
+      const merged = {
+        ...original,
+        titulo:      formData.name,
+        descripcion: formData.description,
+        tema:        formData.category,
+        fecha:       formData.date,
+        hora_inicio: formData.startTime,
+        hora_fin:    formData.endTime,
+        location:    formData.location,
+        imageUrl:    formData.imageUrl,
+        // Dejamos intactos todos los demás campos (ponente, invitados_especiales, modalidad, etc.)
+      };
+
+      const payload = { data: merged };
+
+      // c) Enviar PUT a UniDB
+      const res = await fetch(
+        `${BASE_URL}/data/events/update/${entryId}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(JSON.stringify(err));
+      }
+
+      // Volver atrás (y, si tienes un reload en useEvent, se refrescará la vista detalle)
       router.back();
     } catch (error) {
       console.error('Error updating event:', error);
-      setErrors({
-        submit: 'Failed to update event. Please try again.',
-      });
+      setErrors({ submit: 'Failed to update event. Please try again.' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  if (isLoading) {
+  // 5) Confirmar delete con diálogo nativo
+  const confirmDelete = () => {
+    Alert.alert(
+      'Delete Event',
+      'Are you sure you want to delete this event and all its relations?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: handleDelete },
+      ]
+    );
+  };
+
+  // 6) Eliminar relaciones y el evento
+  const handleDelete = async () => {
+    if (!id || !entryId) {
+      Alert.alert('Error', 'Missing event identifier.');
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      // a) Borrar event_speakers
+      const relS = await fetch(`${BASE_URL}/data/event_speakers/all?format=json`);
+      const { data: rs } = (await relS.json()) as { data: RawRow<RawEventSpeaker>[] };
+      for (const r of rs.filter(r => String(r.data.event_id) === id)) {
+        await fetch(
+          `${BASE_URL}/data/event_speakers/delete/${r.entry_id}`,
+          { method: 'DELETE' }
+        );
+      }
+
+      // b) Borrar event_tracks
+      const relT = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`);
+      const { data: rt } = (await relT.json()) as { data: RawRow<RawEventTrack>[] };
+      for (const r of rt.filter(r => String(r.data.event_id) === id)) {
+        await fetch(
+          `${BASE_URL}/data/event_tracks/delete/${r.entry_id}`,
+          { method: 'DELETE' }
+        );
+      }
+
+      // c) Borrar el evento
+      const resDel = await fetch(
+        `${BASE_URL}/data/events/delete/${entryId}`,
+        { method: 'DELETE' }
+      );
+      if (!resDel.ok) throw new Error('Failed to delete event');
+
+      router.back();
+    } catch (err) {
+      console.error('Error deleting event:', err);
+      Alert.alert('Error', 'Failed to delete event. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // 7) Mostrar indicador mientras carga
+  if (loadingEvent) {
     return (
-      <View style={[
-        styles.loadingContainer,
-        { backgroundColor: isDark ? '#000000' : '#F2F2F7' }
-      ]}>
-        <Text style={{ color: isDark ? '#FFFFFF' : '#000000' }}>Loading...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
+        <ActivityIndicator size="large" color="#0A84FF" />
       </View>
     );
   }
 
+  // 8) Si no existe el evento
   if (!event) {
     return (
-      <View style={[
-        styles.errorContainer,
-        { backgroundColor: isDark ? '#000000' : '#F2F2F7' }
-      ]}>
-        <Text style={[
-          styles.errorText,
-          { color: isDark ? '#FFFFFF' : '#000000' }
-        ]}>
+      <View style={[styles.errorContainer, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
+        <Text style={[styles.errorText, { color: isDark ? '#FFF' : '#000' }]}>
           Event not found
         </Text>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backButtonText}>
-            Go Back
-          </Text>
+        <Pressable style={styles.backButton} onPress={() => router.back()}>
+          <Text style={styles.backButtonText}>Go Back</Text>
         </Pressable>
       </View>
     );
   }
 
+  // 9) Render del formulario completo, usando los componentes divididos
   return (
     <ScrollView
-      style={[
-        styles.container,
-        { backgroundColor: isDark ? '#000000' : '#F2F2F7' }
-      ]}
+      style={[styles.container, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}
       contentContainerStyle={styles.contentContainer}
     >
-      <View style={[
-        styles.formContainer,
-        { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
-      ]}>
-        {/* Image Preview */}
-        {formData.imageUrl ? (
-          <View style={styles.imagePreviewContainer}>
-            <Image
-              source={{ uri: formData.imageUrl }}
-              style={styles.imagePreview}
-              resizeMode="cover"
-            />
-            <Pressable
-              style={styles.removeImageButton}
-              onPress={() => setFormData(prev => ({ ...prev, imageUrl: '' }))}
-            >
-              <X size={20} color="#FFFFFF" />
-            </Pressable>
-          </View>
-        ) : (
-          <Pressable
-            style={[
-              styles.imageUploadButton,
-              { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }
-            ]}
-            onPress={() => {
-              // In a real app, this would open an image picker
-              setFormData(prev => ({
-                ...prev,
-                imageUrl: 'https://images.pexels.com/photos/2774556/pexels-photo-2774556.jpeg',
-              }));
-            }}
-          >
-            <ImagePlus size={32} color={isDark ? '#FFFFFF' : '#000000'} />
-            <Text style={[
-              styles.imageUploadText,
-              { color: isDark ? '#FFFFFF' : '#000000' }
-            ]}>
-              Change Event Image
-            </Text>
-          </Pressable>
-        )}
-        
-        {/* Event Name */}
-        <View style={styles.inputContainer}>
-          <Text style={[
-            styles.label,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            Event Name *
-          </Text>
-          <TextInput
-            style={[
-              styles.input,
-              { 
-                backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
-                color: isDark ? '#FFFFFF' : '#000000',
-              }
-            ]}
-            placeholder="Enter event name"
-            placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-            value={formData.name}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
-          />
-          {errors.name && (
-            <Text style={styles.errorText}>{errors.name}</Text>
-          )}
-        </View>
-        
-        {/* Description */}
-        <View style={styles.inputContainer}>
-          <Text style={[
-            styles.label,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            Description *
-          </Text>
-          <TextInput
-            style={[
-              styles.input,
-              styles.textArea,
-              { 
-                backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
-                color: isDark ? '#FFFFFF' : '#000000',
-              }
-            ]}
-            placeholder="Enter event description"
-            placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-            multiline
-            numberOfLines={4}
-            value={formData.description}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, description: text }))}
-          />
-          {errors.description && (
-            <Text style={styles.errorText}>{errors.description}</Text>
-          )}
-        </View>
-        
-        {/* Category */}
-        <View style={styles.inputContainer}>
-          <Text style={[
-            styles.label,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            Category *
-          </Text>
-          <View style={styles.categoryContainer}>
-            {categories.map(category => (
-              <Pressable
-                key={category}
-                style={[
-                  styles.categoryChip,
-                  { 
-                    backgroundColor: formData.category === category 
-                      ? '#0A84FF' 
-                      : isDark ? '#2C2C2E' : '#F2F2F7'
-                  }
-                ]}
-                onPress={() => setFormData(prev => ({ ...prev, category }))}
-              >
-                <Text style={[
-                  styles.categoryChipText,
-                  { 
-                    color: formData.category === category 
-                      ? '#FFFFFF' 
-                      : isDark ? '#FFFFFF' : '#000000'
-                  }
-                ]}>
-                  {category}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          {errors.category && (
-            <Text style={styles.errorText}>{errors.category}</Text>
-          )}
-        </View>
-        
-        {/* Date and Time */}
-        <View style={styles.row}>
-          <View style={[styles.inputContainer, styles.flex1]}>
-            <Text style={[
-              styles.label,
-              { color: isDark ? '#FFFFFF' : '#000000' }
-            ]}>
-              Date *
-            </Text>
-            <View style={styles.iconInput}>
-              <Calendar size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
-              <TextInput
-                style={[
-                  styles.input,
-                  { 
-                    backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
-                    color: isDark ? '#FFFFFF' : '#000000',
-                  }
-                ]}
-                placeholder="Select date"
-                placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-                value={formData.date}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, date: text }))}
-              />
-            </View>
-            {errors.date && (
-              <Text style={styles.errorText}>{errors.date}</Text>
-            )}
-          </View>
-          
-          <View style={[styles.inputContainer, styles.flex1]}>
-            <Text style={[
-              styles.label,
-              { color: isDark ? '#FFFFFF' : '#000000' }
-            ]}>
-              Time *
-            </Text>
-            <View style={styles.iconInput}>
-              <Clock size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
-              <TextInput
-                style={[
-                  styles.input,
-                  { 
-                    backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
-                    color: isDark ? '#FFFFFF' : '#000000',
-                  }
-                ]}
-                placeholder="Select time"
-                placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-                value={formData.time}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, time: text }))}
-              />
-            </View>
-            {errors.time && (
-              <Text style={styles.errorText}>{errors.time}</Text>
-            )}
-          </View>
-        </View>
-        
-        {/* Location */}
-        <View style={styles.inputContainer}>
-          <Text style={[
-            styles.label,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            Location *
-          </Text>
-          <View style={styles.iconInput}>
-            <MapPin size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
-            <TextInput
-              style={[
-                styles.input,
-                { 
-                  backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
-                  color: isDark ? '#FFFFFF' : '#000000',
-                }
-              ]}
-              placeholder="Enter location"
-              placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-              value={formData.location}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, location: text }))}
-            />
-          </View>
-          {errors.location && (
-            <Text style={styles.errorText}>{errors.location}</Text>
-          )}
-        </View>
-        
-        {errors.submit && (
-          <Text style={[styles.errorText, styles.submitError]}>
-            {errors.submit}
-          </Text>
-        )}
-        
-        {/* Submit Button */}
-        <Pressable
-          style={styles.submitButton}
-          onPress={handleSubmit}
-        >
-          <Text style={styles.submitButtonText}>
-            Save Changes
-          </Text>
-        </Pressable>
+      <View style={[styles.formContainer, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}>
+        {/* Imagen */}
+        <ImagePickerField
+          imageUrl={formData.imageUrl}
+          onImageChange={uri => setFormData(p => ({ ...p, imageUrl: uri }))}
+        />
+
+        {/* Nombre */}
+        <TextField
+          label="Event Name *"
+          value={formData.name}
+          placeholder="Enter event name"
+          onChange={text => setFormData(p => ({ ...p, name: text }))}
+          error={errors.name}
+        />
+
+        {/* Descripción */}
+        <TextAreaField
+          label="Description *"
+          value={formData.description}
+          placeholder="Enter event description"
+          onChange={text => setFormData(p => ({ ...p, description: text }))}
+          error={errors.description}
+        />
+
+        {/* Categoría */}
+        <CategorySelector
+          label="Category *"
+          options={categories}
+          selected={formData.category}
+          onSelect={opt => setFormData(p => ({ ...p, category: opt }))}
+          error={errors.category}
+        />
+
+        {/* Fecha y Horario */}
+        <DateTimeFields
+          date={formData.date}
+          startTime={formData.startTime}
+          endTime={formData.endTime}
+          onDateChange={text => setFormData(p => ({ ...p, date: text }))}
+          onStartTimeChange={text => setFormData(p => ({ ...p, startTime: text }))}
+          onEndTimeChange={text => setFormData(p => ({ ...p, endTime: text }))}
+          errors={{
+            date: errors.date,
+            startTime: errors.startTime,
+            endTime: errors.endTime
+          }}
+        />
+
+        {/* Ubicación */}
+        <LocationField
+          value={formData.location}
+          onChange={text => setFormData(p => ({ ...p, location: text }))}
+          error={errors.location}
+        />
+
+        {/* Errores globales de submit */}
+        {errors.submit && <Text style={[styles.errorText, styles.submitError]}>{errors.submit}</Text>}
+
+        {/* Botones Guardar / Borrar */}
+        <SubmitDeleteButtons
+          isSubmitting={isSubmitting}
+          isDeleting={isDeleting}
+          onSubmit={handleSubmit}
+          onConfirmDelete={confirmDelete}
+        />
       </View>
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 18,
-    marginBottom: 16,
-  },
-  backButton: {
-    padding: 12,
-    backgroundColor: '#0A84FF',
-    borderRadius: 8,
-  },
-  backButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  formContainer: {
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  imagePreviewContainer: {
-    height: 200,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 16,
-    position: 'relative',
-  },
-  imagePreview: {
-    width: '100%',
-    height: '100%',
-  },
-  removeImageButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imageUploadButton: {
-    height: 200,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  imageUploadText: {
-    marginTop: 8,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    height: 44,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 16,
-    flex: 1,
-  },
-  textArea: {
-    height: 100,
-    paddingTop: 12,
-    paddingBottom: 12,
-    textAlignVertical: 'top',
-  },
-  categoryContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  categoryChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  categoryChipText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  flex1: {
-    flex: 1,
-  },
-  iconInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#2C2C2E',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-  },
-  errorText: {
-    color: '#FF453A',
-    fontSize: 14,
-    marginTop: 4,
-  },
-  submitError: {
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  submitButton: {
-    backgroundColor: '#0A84FF',
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
