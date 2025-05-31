@@ -14,7 +14,7 @@ const BASE_URL = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`
 
 type RawRow<T> = { entry_id: string; data: T }
 
-// 1) Define la forma cruda de un evento en la DB
+// 1) Forma cruda de un evento en la DB (fíjate en "lugar", no "location")
 type RawEvent = {
   id: number
   titulo: string
@@ -23,12 +23,12 @@ type RawEvent = {
   fecha: string
   hora_inicio: string
   hora_fin: string
-  location: string
+  lugar: string      // <– aquí se llama “lugar” en la DB
   imageUrl: string
   suscritos: number
 }
 
-// 2) Raw de la tabla puente
+// 2) Raw de la tabla puente event_speakers
 type RawEventSpeaker = {
   event_id: number
   speaker_id: number
@@ -49,15 +49,17 @@ export function useEvent(id: string) {
   const [feedback, setFeedback] = useState<Feedback[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Función que realmente hace el fetch y mapea todo
+  // Función que hace todo el fetch y mapea a nuestros tipos
   const fetchEventDetails = useCallback(async () => {
     if (!id) return
     setIsLoading(true)
     try {
-      // --- 1) Leer eventos
+      // --- 1) Leer todos los eventos ---
       const resE = await fetch(`${BASE_URL}/data/events/all?format=json`)
       const { data: rawE } = (await resE.json()) as { data: RawRow<RawEvent>[] }
       const rawEvents = rawE.map(r => r.data)
+
+      // Buscar el RawEvent concreto
       const rawEv = rawEvents.find(e => String(e.id) === id)
       if (!rawEv) {
         setEvent(null)
@@ -65,7 +67,7 @@ export function useEvent(id: string) {
         return
       }
 
-      // --- 2) Leer relaciones event_speakers
+      // --- 2) Leer relaciones event_speakers ---
       const resRel = await fetch(`${BASE_URL}/data/event_speakers/all?format=json`)
       const { data: rawRel } = (await resRel.json()) as { data: RawRow<RawEventSpeaker>[] }
       const rels = rawRel.map(r => r.data)
@@ -75,7 +77,7 @@ export function useEvent(id: string) {
         )
       )
 
-      // --- 3) Leer speakers
+      // --- 3) Leer todos los speakers ---
       const resS = await fetch(`${BASE_URL}/data/speakers/all?format=json`)
       const { data: rawS } = (await resS.json()) as { data: RawRow<{ id: number; name: string }>[] }
       const rawSpeakers = rawS.map(r => r.data)
@@ -94,7 +96,7 @@ export function useEvent(id: string) {
         })
       setSpeakers(Array.from(speakerMap.values()))
 
-      // --- 4) Leer feedbacks
+      // --- 4) Leer todos los feedbacks ---
       const resF = await fetch(`${BASE_URL}/data/feedbacks/all?format=json`)
       const { data: rawF } = (await resF.json()) as { data: RawRow<RawFeedback>[] }
       const allFb = rawF.map(r => r.data)
@@ -110,14 +112,13 @@ export function useEvent(id: string) {
         }))
       )
 
-      // --- 5) Calcular rating promedio y conteo
+      // --- 5) Calcular rating promedio y conteo ---
       const ratingCount = fList.length
-      const rating =
-        ratingCount > 0
-          ? fList.reduce((sum, x) => sum + x.rating, 0) / ratingCount
-          : 0
+      const rating = ratingCount > 0
+        ? fList.reduce((sum, x) => sum + x.rating, 0) / ratingCount
+        : 0
 
-      // --- 6) Mapear Event
+      // --- 6) Mapear a nuestro tipo Event (agregamos tracks: [])
       setEvent({
         id: String(rawEv.id),
         name: rawEv.titulo,
@@ -125,10 +126,11 @@ export function useEvent(id: string) {
         category: rawEv.tema as EventCategory,
         date: rawEv.fecha,
         time: `${rawEv.hora_inicio} - ${rawEv.hora_fin}`,
-        location: rawEv.location,
+        location: rawEv.lugar,         // <– usamos “lugar”
         imageUrl: rawEv.imageUrl,
         rating,
-        ratingCount
+        ratingCount,
+        tracks: []                      // <– añadimos tracks (vacío) para que coincida con Event
       })
     } catch (err) {
       console.error('useEvent error:', err)
@@ -137,20 +139,21 @@ export function useEvent(id: string) {
     }
   }, [id])
 
-  // Llamamos a la carga inicial
+  // Ejecutar carga inicial y exponer reload
   useEffect(() => {
     fetchEventDetails()
   }, [fetchEventDetails])
 
+  // Eliminar evento (y sus relaciones en event_speakers) basándose en el id
   const deleteEvent = useCallback(async () => {
     try {
-      // 1) eliminar relaciones event_speakers
+      // 1) Eliminar relaciones event_speakers
       const relS = await fetch(`${BASE_URL}/data/event_speakers/all?format=json`)
       const { data: rawRelS } = (await relS.json()) as { data: RawRow<RawEventSpeaker>[] }
       for (const r of rawRelS.filter(r => String(r.data.event_id) === id)) {
         await fetch(`${BASE_URL}/data/event_speakers/delete/${r.entry_id}`, { method: 'DELETE' })
       }
-      // 2) eliminar el evento
+      // 2) Eliminar el evento
       const res = await fetch(`${BASE_URL}/data/events/delete/${id}`, { method: 'DELETE' })
       return res.ok
     } catch {
@@ -158,7 +161,6 @@ export function useEvent(id: string) {
     }
   }, [id])
 
-  // Exponemos reload para que, al volver de la edición, puedas recargar
   return {
     event,
     speakers,

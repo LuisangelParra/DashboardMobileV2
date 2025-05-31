@@ -25,6 +25,7 @@ type RawEvent = {
   hora_fin: string    // "HH:MM"
   max_participantes: number
   suscritos: number
+  lugar: string       // <–– corregido aquí
   imageUrl: string
 }
 
@@ -56,23 +57,23 @@ export function useEvents(params: {
   const fetchAll = useCallback(async () => {
     setIsLoading(true)
     try {
-      // 1) Leer eventos
+      // 1) Leer todos los eventos
       const resE = await fetch(`${BASE_URL}/data/events/all?format=json`)
       const { data: rawE } = (await resE.json()) as { data: RawRow<RawEvent>[] }
 
-      // 2) Leer feedbacks
+      // 2) Leer todos los feedbacks
       const resF = await fetch(`${BASE_URL}/data/feedbacks/all?format=json`)
       const { data: rawF } = (await resF.json()) as { data: RawRow<RawFeedback>[] }
 
-      // 3) Leer tracks
+      // 3) Leer todos los tracks
       const resT = await fetch(`${BASE_URL}/data/tracks/all?format=json`)
       const { data: rawT } = (await resT.json()) as { data: RawRow<RawTrack>[] }
 
-      // 4) Leer event_tracks
+      // 4) Leer todas las relaciones event_tracks
       const resET = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`)
       const { data: rawET } = (await resET.json()) as { data: RawRow<RawEventTrack>[] }
 
-      // 5) Agrupar feedbacks por evento
+      // 5) Agrupar feedbacks por event_id
       const feedbackByEvent: Record<number, RawFeedback[]> = {}
       rawF.forEach(r => {
         const fb = r.data
@@ -80,11 +81,13 @@ export function useEvents(params: {
         feedbackByEvent[fb.event_id].push(fb)
       })
 
-      // 6) Mapa de tracks
+      // 6) Crear un mapa de trackId → nombre
       const trackMap: Record<number, string> = {}
-      rawT.forEach(r => { trackMap[r.data.id] = r.data.nombre })
+      rawT.forEach(r => {
+        trackMap[r.data.id] = r.data.nombre
+      })
 
-      // 7) Agrupar tracks por evento
+      // 7) Agrupar track IDs por event_id
       const tracksByEvent: Record<number, number[]> = {}
       rawET.forEach(r => {
         const { event_id, track_id } = r.data
@@ -92,7 +95,7 @@ export function useEvents(params: {
         tracksByEvent[event_id].push(track_id)
       })
 
-      // 8) Mapear a nuestro tipo Event
+      // 8) Mapear cada evento crudo a nuestro tipo Event (incluyendo cálculo de rating y asignar `location` = e.lugar)
       const mapped = rawE.map(r => {
         const e = r.data
         const fList = feedbackByEvent[e.id] || []
@@ -101,7 +104,7 @@ export function useEvents(params: {
           ? fList.reduce((sum, x) => sum + x.rating, 0) / count
           : 0
 
-        // tracks de este evento
+        // Obtener lista de nombres de tracks para este evento
         const trackIds = tracksByEvent[e.id] || []
         const trackNames = trackIds
           .map(tid => trackMap[tid])
@@ -113,18 +116,20 @@ export function useEvents(params: {
           description: e.descripcion,
           category: e.tema as EventCategory,
           date: new Date(e.fecha).toLocaleDateString(undefined, {
-            month: 'short', day: 'numeric', year: 'numeric'
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
           }),
           time: `${e.hora_inicio} - ${e.hora_fin}`,
-          location: '',         // si no lo tienes en DB
+          location: e.lugar,       // <–– aquí usamos “lugar”
           imageUrl: e.imageUrl,
           rating: avg,
           ratingCount: count,
-          tracks: trackNames
+          tracks: trackNames     // <–– arreglo de EventCategory basado en la tabla event_tracks ↔ tracks
         }
       })
 
-      // 9) Filtrar por search y categoría
+      // 9) Aplicar filtros de búsqueda y categoría (tracks)
       let filtered = mapped
       if (params.search) {
         const q = params.search.toLowerCase()
