@@ -29,11 +29,11 @@ export function CategorySelector({
       </Text>
 
       <View style={styles.categoryContainer}>
-        {options.map(opt => {
+        {options.map((opt, index) => {
           const isSelected = selected.includes(opt);
           return (
             <Pressable
-              key={opt}
+              key={`track-${opt}-${index}`}
               style={[
                 styles.categoryChip,
                 {

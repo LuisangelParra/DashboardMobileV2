@@ -21,7 +21,7 @@ interface Props {
   label: string;
   options: SpeakerOption[];
   selected: string[];
-  onSelect: (name: string) => void; // alternar en la lista
+  onSelect: (name: string) => void;
   error?: string;
 }
 
@@ -36,12 +36,12 @@ export function MultiSpeakerPicker({
   const [query, setQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // Filtrar opciones: debe tener id y name definidos, no estar ya seleccionado, y coincidir con el query
+  // Filtrar opciones con protección contra valores null/undefined
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
     return options
-      .filter(o => o.id && o.name)             // descartar cualquier opción con id o name indefinido
-      .filter(o => !selected.includes(o.name!)) // no mostrar los ya seleccionados
+      .filter(o => o.id && o.name)
+      .filter(o => !selected.includes(o.name!))
       .filter(o =>
         !q ? true : o.name!.toLowerCase().includes(q)
       );
@@ -56,10 +56,10 @@ export function MultiSpeakerPicker({
       {/* Tags de invitados especiales ya seleccionados */}
       <View style={styles.tagContainer}>
         {selected
-          .filter(name => typeof name === 'string' && name.length > 0) // asegurar que name no sea indefinido
+          .filter(name => typeof name === 'string' && name.length > 0)
           .map(name => (
             <View
-              key={name}
+              key={`selected-${name}`} // ✅ KEY ÚNICA PARA TAGS
               style={[
                 styles.tag,
                 { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' },
@@ -108,8 +108,8 @@ export function MultiSpeakerPicker({
         >
           <FlatList
             data={filtered}
-            keyExtractor={item =>
-              item.id ? item.id : item.name ? item.name : Math.random().toString()
+            keyExtractor={(item, index) => 
+              `guest-option-${item.id}-${item.name}-${index}` // ✅ KEY ÚNICA MEJORADA
             }
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
@@ -146,3 +146,5 @@ export function MultiSpeakerPicker({
     </View>
   );
 }
+
+// ✅ FIN DEL ARCHIVO - NO AGREGAR MÁS CÓDIGO JSX AQUÍ

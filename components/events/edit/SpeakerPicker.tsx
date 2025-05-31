@@ -82,8 +82,9 @@ export function SpeakerPicker({
             data={filtered}
             keyExtractor={item => item.id}
             keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => (
+            renderItem={({ item, index }) => (
               <Pressable
+                key={`${item.id}-${item.name}-${index}`}
                 style={[
                   styles.dropdownItem,
                   { backgroundColor: isDark ? '#2C2C2E' : '#FFF' },

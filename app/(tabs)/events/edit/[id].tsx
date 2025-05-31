@@ -85,7 +85,7 @@ export default function EditEventScreen() {
   /* ---------- ponente principal e invitados ---------- */
   type SpeakerOption = { id: string; name: string };
   const [speakerOptions, setSpeakerOptions] = useState<SpeakerOption[]>([]);
-  const [mainSpeakerName, setMainSpeakerName] = useState<string | null>(null);
+  const [mainSpeakerName, setMainSpeakerName] = useState<string>(''); // ✅ string vacío en lugar de null
   const [guestNames, setGuestNames] = useState<string[]>([]);
 
   /* ---------- formulario ---------- */
@@ -98,6 +98,7 @@ export default function EditEventScreen() {
     location: '',
     imageUrl: '',
   });
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -140,12 +141,18 @@ export default function EditEventScreen() {
         }));
         setSpeakerOptions(opts);
 
-        /* ponente / invitados guardados (nombres) */
+        /* ponente / invitados guardados (nombres) - ✅ VALORES SEGUROS */
         const rowEvResponse = await fetch(`${BASE_URL}/data/events/all?format=json`);
         const { data: allRows } = (await rowEvResponse.json()) as { data: RawRow<RawEvent>[] };
         const rawEv = allRows.find(r => String(r.data.id) === id)?.data;
-        if (rawEv?.ponente) setMainSpeakerName(rawEv.ponente);
-        if (rawEv?.invitados_especiales) setGuestNames(rawEv.invitados_especiales);
+
+        // ✅ ASEGURAR VALORES STRING
+        if (rawEv?.ponente) {
+          setMainSpeakerName(rawEv.ponente || '');
+        }
+        if (rawEv?.invitados_especiales && Array.isArray(rawEv.invitados_especiales)) {
+          setGuestNames(rawEv.invitados_especiales.filter(guest => guest != null));
+        }
       } catch (err) {
         console.error('load tracks/speakers error:', err);
       }
@@ -157,15 +164,18 @@ export default function EditEventScreen() {
   /* ---------- precargar datos cuando llega el evento ---------- */
   useEffect(() => {
     if (!event) return;
-    const [startTime, endTime] = event.time.split(' - ');
+
+    // ✅ ASEGURAR QUE TODOS LOS VALORES SEAN STRINGS
+    const [startTime, endTime] = (event.time || '').split(' - ');
+
     setFormData({
-      name: event.name,
-      description: event.description,
-      date: event.date,
-      startTime,
-      endTime,
-      location: event.location,
-      imageUrl: event.imageUrl,
+      name: event.name || '',
+      description: event.description || '',
+      date: event.date || '',
+      startTime: startTime || '',
+      endTime: endTime || '',
+      location: event.location || '',
+      imageUrl: event.imageUrl || '',
     });
   }, [event]);
 
@@ -177,25 +187,27 @@ export default function EditEventScreen() {
   };
 
   const toggleGuest = (name: string) => {
+    if (!name) return; // ✅ PROTECCIÓN CONTRA VALORES VACÍOS
+
     setGuestNames(prev =>
       prev.includes(name) ? prev.filter(g => g !== name) : [...prev, name]
     );
     if (mainSpeakerName === name) {
-      setMainSpeakerName(null);
+      setMainSpeakerName(''); // ✅ STRING VACÍO EN LUGAR DE NULL
     }
   };
 
   const validateForm = () => {
     const e: Record<string, string> = {};
-    if (!formData.name.trim()) e.name = 'Event name is required';
-    if (!formData.description.trim()) e.description = 'Description is required';
-    if (!formData.date.trim()) e.date = 'Date is required';
-    if (!formData.startTime.trim()) e.startTime = 'Start time is required';
-    if (!formData.endTime.trim()) e.endTime = 'End time is required';
-    if (!formData.location.trim()) e.location = 'Location is required';
-    if (!formData.imageUrl.trim()) e.imageUrl = 'Image URL is required';
+    if (!formData.name?.trim()) e.name = 'Event name is required';
+    if (!formData.description?.trim()) e.description = 'Description is required';
+    if (!formData.date?.trim()) e.date = 'Date is required';
+    if (!formData.startTime?.trim()) e.startTime = 'Start time is required';
+    if (!formData.endTime?.trim()) e.endTime = 'End time is required';
+    if (!formData.location?.trim()) e.location = 'Location is required';
+    if (!formData.imageUrl?.trim()) e.imageUrl = 'Image URL is required';
     if (selectedTracks.length === 0) e.tracks = 'Select at least one track';
-    if (!mainSpeakerName) e.mainSpeaker = 'Select main speaker';
+    if (!mainSpeakerName?.trim()) e.mainSpeaker = 'Select main speaker'; // ✅ VERIFICAR STRING
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -215,15 +227,15 @@ export default function EditEventScreen() {
       const payload = {
         data: {
           ...row.data,
-          titulo:               formData.name,
-          descripcion:          formData.description,
-          fecha:                formData.date,
-          hora_inicio:          formData.startTime,
-          hora_fin:             formData.endTime,
-          lugar:                formData.location,
-          imageUrl:             formData.imageUrl,
-          ponente:              mainSpeakerName,
-          invitados_especiales: guestNames,
+          titulo:               formData.name || '',
+          descripcion:          formData.description || '',
+          fecha:                formData.date || '',
+          hora_inicio:          formData.startTime || '',
+          hora_fin:             formData.endTime || '',
+          lugar:                formData.location || '',
+          imageUrl:             formData.imageUrl || '',
+          ponente:              mainSpeakerName || null, // ✅ NULL SOLO PARA DB
+          invitados_especiales: guestNames.filter(g => g != null && g.trim() !== ''), // ✅ FILTRAR VALORES VACÍOS
         },
       };
       const putRes = await fetch(
@@ -327,32 +339,28 @@ export default function EditEventScreen() {
 
   /* ---------- render ---------- */
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}
-      contentContainerStyle={styles.contentContainer}
-    >
+    <ScrollView style={[styles.container, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
       <View style={[styles.formContainer, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}>
-        {/* Imagen */}
+        
+        {/* ✅ Campo de imagen con valor seguro */}
         <ImagePickerField
-          imageUrl={formData.imageUrl}
-          onImageChange={uri => setFormData(p => ({ ...p, imageUrl: uri }))}
+          imageUrl={formData.imageUrl || ''}
+          onImageChange={uri => setFormData(p => ({ ...p, imageUrl: uri || '' }))}
         />
 
-        {/* Nombre */}
+        {/* ✅ Campo de nombre del evento */}
         <TextField
           label="Event Name *"
-          value={formData.name}
-          placeholder="Enter event name"
-          onChange={text => setFormData(p => ({ ...p, name: text }))}
+          value={formData.name || ''}
+          onChangeText={text => setFormData(p => ({ ...p, name: text || '' }))}
           error={errors.name}
         />
 
-        {/* Descripción */}
+        {/* ✅ Campo de descripción */}
         <TextAreaField
           label="Description *"
-          value={formData.description}
-          placeholder="Enter event description"
-          onChange={text => setFormData(p => ({ ...p, description: text }))}
+          value={formData.description || ''}
+          onChangeText={text => setFormData(p => ({ ...p, description: text || '' }))}
           error={errors.description}
         />
 
@@ -369,11 +377,12 @@ export default function EditEventScreen() {
         <SpeakerPicker
           label="Main Speaker *"
           options={speakerOptions}
-          selected={mainSpeakerName}
+          selected={mainSpeakerName || ''}
           onSelect={name => {
-            setMainSpeakerName(name);
+            const safeName = name || '';
+            setMainSpeakerName(safeName);
             // si estaba en invitados, quitarlo
-            if (guestNames.includes(name)) toggleGuest(name);
+            if (guestNames.includes(safeName)) toggleGuest(safeName);
           }}
           error={errors.mainSpeaker}
         />
@@ -381,8 +390,8 @@ export default function EditEventScreen() {
         {/* INVITADOS ESPECIALES */}
         <MultiSpeakerPicker
           label="Special Guests"
-          options={speakerOptions.filter(s => s.name !== mainSpeakerName)}
-          selected={guestNames}
+          options={speakerOptions.filter(s => s.name && s.name !== mainSpeakerName)}
+          selected={guestNames.filter(g => g != null && g.trim() !== '')}
           onSelect={toggleGuest}
         />
 
