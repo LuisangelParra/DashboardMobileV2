@@ -4,20 +4,26 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
-  TextInput,
   ScrollView,
   Pressable,
   useColorScheme,
-  Image,
   ActivityIndicator,
   Alert
 } from 'react-native';
 import Constants from 'expo-constants';
 import { useLocalSearchParams, router } from 'expo-router';
-import { Calendar, Clock, MapPin, ImagePlus, X } from 'lucide-react-native';
-import { EventCategory } from '@/types';
 import { useEvent } from '@/hooks/useEvent';
+import styles from '@/components/events/edit/editEvent.styles';
+
+import { ImagePickerField } from '@/components/events/edit/ImagePickerField';
+import { TextField } from '@/components/events/edit/TextField';
+import { TextAreaField } from '@/components/events/edit/TextAreaField';
+import { CategorySelector } from '@/components/events/edit/CategorySelector';
+import { DateTimeFields } from '@/components/events/edit/DateTimeFields';
+import { LocationField } from '@/components/events/edit/LocationField';
+import { SubmitDeleteButtons } from '@/components/events/edit/SubmitDeleteButtons';
+
+import { EventCategory } from '@/types';
 
 const {
   UNIDB_BASE_URL,
@@ -42,6 +48,8 @@ type RawEvent = {
   suscritos: number;
   // plus any other fields
 };
+type RawEventSpeaker = { event_id: number; speaker_id: number };
+type RawEventTrack = { event_id: number; track_id: number };
 
 export default function EditEventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -64,7 +72,7 @@ export default function EditEventScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Fetch entry_id
+  // 1) Obtener el entry_id correspondiente en UniDB
   useEffect(() => {
     if (!id) return;
     (async () => {
@@ -79,7 +87,7 @@ export default function EditEventScreen() {
     })();
   }, [id]);
 
-  // Populate form
+  // 2) Popula el formulario con los datos existentes
   useEffect(() => {
     if (!event) return;
     const [startTime, endTime] = event.time.split(' - ');
@@ -103,6 +111,7 @@ export default function EditEventScreen() {
     'Other',
   ];
 
+  // 3) Validación de formulario
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.name.trim()) newErrors.name = 'Event name is required';
@@ -117,6 +126,7 @@ export default function EditEventScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
+  // 4) Al presionar “Save Changes”: recupero la fila original, la fusiono y hago PUT
   const handleSubmit = async () => {
     if (!validateForm()) return;
     if (!entryId) {
@@ -125,14 +135,14 @@ export default function EditEventScreen() {
     }
     setIsSubmitting(true);
     try {
-      // Fetch the original row data to preserve untouched fields
+      // a) Obtener datos crudos para conservar campos no editables
       const resRow = await fetch(`${BASE_URL}/data/events/all?format=json`);
       const { data: rows } = (await resRow.json()) as { data: RawRow<RawEvent>[] };
       const row = rows.find(r => r.entry_id === entryId);
       if (!row) throw new Error('Original event data not found');
       const original = row.data;
 
-      // Merge original with updates
+      // b) Fusionar los campos que sí se editaron
       const merged = {
         ...original,
         titulo:      formData.name,
@@ -143,10 +153,12 @@ export default function EditEventScreen() {
         hora_fin:    formData.endTime,
         location:    formData.location,
         imageUrl:    formData.imageUrl,
+        // Dejamos intactos todos los demás campos (ponente, invitados_especiales, modalidad, etc.)
       };
 
       const payload = { data: merged };
 
+      // c) Enviar PUT a UniDB
       const res = await fetch(
         `${BASE_URL}/data/events/update/${entryId}`,
         {
@@ -160,6 +172,7 @@ export default function EditEventScreen() {
         throw new Error(JSON.stringify(err));
       }
 
+      // Volver atrás (y, si tienes un reload en useEvent, se refrescará la vista detalle)
       router.back();
     } catch (error) {
       console.error('Error updating event:', error);
@@ -169,6 +182,7 @@ export default function EditEventScreen() {
     }
   };
 
+  // 5) Confirmar delete con diálogo nativo
   const confirmDelete = () => {
     Alert.alert(
       'Delete Event',
@@ -180,6 +194,7 @@ export default function EditEventScreen() {
     );
   };
 
+  // 6) Eliminar relaciones y el evento
   const handleDelete = async () => {
     if (!id || !entryId) {
       Alert.alert('Error', 'Missing event identifier.');
@@ -187,7 +202,7 @@ export default function EditEventScreen() {
     }
     setIsDeleting(true);
     try {
-      // Delete event_speakers relations
+      // a) Borrar event_speakers
       const relS = await fetch(`${BASE_URL}/data/event_speakers/all?format=json`);
       const { data: rs } = (await relS.json()) as { data: RawRow<RawEventSpeaker>[] };
       for (const r of rs.filter(r => String(r.data.event_id) === id)) {
@@ -197,7 +212,7 @@ export default function EditEventScreen() {
         );
       }
 
-      // Delete event_tracks relations
+      // b) Borrar event_tracks
       const relT = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`);
       const { data: rt } = (await relT.json()) as { data: RawRow<RawEventTrack>[] };
       for (const r of rt.filter(r => String(r.data.event_id) === id)) {
@@ -207,7 +222,7 @@ export default function EditEventScreen() {
         );
       }
 
-      // Delete the event
+      // c) Borrar el evento
       const resDel = await fetch(
         `${BASE_URL}/data/events/delete/${entryId}`,
         { method: 'DELETE' }
@@ -223,6 +238,7 @@ export default function EditEventScreen() {
     }
   };
 
+  // 7) Mostrar indicador mientras carga
   if (loadingEvent) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
@@ -231,6 +247,7 @@ export default function EditEventScreen() {
     );
   }
 
+  // 8) Si no existe el evento
   if (!event) {
     return (
       <View style={[styles.errorContainer, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
@@ -244,356 +261,79 @@ export default function EditEventScreen() {
     );
   }
 
+  // 9) Render del formulario completo, usando los componentes divididos
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}
       contentContainerStyle={styles.contentContainer}
     >
       <View style={[styles.formContainer, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}>
-        {formData.imageUrl ? (
-          <View style={styles.imagePreviewContainer}>
-            <Image
-              source={{ uri: formData.imageUrl }}
-              style={styles.imagePreview}
-              resizeMode="cover"
-            />
-            <Pressable
-              style={styles.removeImageButton}
-              onPress={() => setFormData(p => ({ ...p, imageUrl: '' }))}
-            >
-              <X size={20} color="#FFF" />
-            </Pressable>
-          </View>
-        ) : (
-          <Pressable
-            style={[styles.imageUploadButton, { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' }]}
-            onPress={() =>
-              setFormData(p => ({
-                ...p,
-                imageUrl: 'https://images.pexels.com/photos/2774556/pexels-photo-2774556.jpeg',
-              }))
-            }
-          >
-            <ImagePlus size={32} color={isDark ? '#FFF' : '#000'} />
-            <Text style={[styles.imageUploadText, { color: isDark ? '#FFF' : '#000' }]}>
-              Change Event Image
-            </Text>
-          </Pressable>
-        )}
+        {/* Imagen */}
+        <ImagePickerField
+          imageUrl={formData.imageUrl}
+          onImageChange={uri => setFormData(p => ({ ...p, imageUrl: uri }))}
+        />
 
-        {/* Name */}
-        <View style={styles.inputContainer}>
-          <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>Event Name *</Text>
-          <TextInput
-            style={[
-              styles.input,
-              { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' },
-            ]}
-            placeholder="Enter event name"
-            placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-            value={formData.name}
-            onChangeText={text => setFormData(p => ({ ...p, name: text }))}
-          />
-          {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
-        </View>
+        {/* Nombre */}
+        <TextField
+          label="Event Name *"
+          value={formData.name}
+          placeholder="Enter event name"
+          onChange={text => setFormData(p => ({ ...p, name: text }))}
+          error={errors.name}
+        />
 
-        {/* Description */}
-        <View style={styles.inputContainer}>
-          <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>Description *</Text>
-          <TextInput
-            style={[
-              styles.input,
-              styles.textArea,
-              { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' },
-            ]}
-            placeholder="Enter event description"
-            placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-            multiline
-            numberOfLines={4}
-            value={formData.description}
-            onChangeText={text => setFormData(p => ({ ...p, description: text }))}
-          />
-          {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
-        </View>
+        {/* Descripción */}
+        <TextAreaField
+          label="Description *"
+          value={formData.description}
+          placeholder="Enter event description"
+          onChange={text => setFormData(p => ({ ...p, description: text }))}
+          error={errors.description}
+        />
 
-        {/* Category */}
-        <View style={styles.inputContainer}>
-          <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>Category *</Text>
-          <View style={styles.categoryContainer}>
-            {categories.map(cat => (
-              <Pressable
-                key={cat}
-                style={[
-                  styles.categoryChip,
-                  {
-                    backgroundColor:
-                      formData.category === cat ? '#0A84FF' : isDark ? '#2C2C2E' : '#F2F2F7',
-                  },
-                ]}
-                onPress={() => setFormData(p => ({ ...p, category: cat }))}
-              >
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    { color: formData.category === cat ? '#FFF' : isDark ? '#FFF' : '#000' },
-                  ]}
-                >
-                  {cat}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          {errors.category && <Text style={styles.errorText}>{errors.category}</Text>}
-        </View>
+        {/* Categoría */}
+        <CategorySelector
+          label="Category *"
+          options={categories}
+          selected={formData.category}
+          onSelect={opt => setFormData(p => ({ ...p, category: opt }))}
+          error={errors.category}
+        />
 
-        {/* Date */}
-        <View style={styles.inputContainer}>
-          <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>Date *</Text>
-          <View style={styles.iconInput}>
-            <Calendar size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
-            <TextInput
-              style={[
-                styles.input,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' },
-              ]}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-              value={formData.date}
-              onChangeText={text => setFormData(p => ({ ...p, date: text }))}
-            />
-          </View>
-          {errors.date && <Text style={styles.errorText}>{errors.date}</Text>}
-        </View>
+        {/* Fecha y Horario */}
+        <DateTimeFields
+          date={formData.date}
+          startTime={formData.startTime}
+          endTime={formData.endTime}
+          onDateChange={text => setFormData(p => ({ ...p, date: text }))}
+          onStartTimeChange={text => setFormData(p => ({ ...p, startTime: text }))}
+          onEndTimeChange={text => setFormData(p => ({ ...p, endTime: text }))}
+          errors={{
+            date: errors.date,
+            startTime: errors.startTime,
+            endTime: errors.endTime
+          }}
+        />
 
-        {/* Time */}
-        <View style={[styles.row, { marginBottom: 16 }]}>
-          <View style={[styles.inputContainer, styles.flex1]}>
-            <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>Start Time *</Text>
-            <View style={styles.iconInput}>
-              <Clock size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
-              <TextInput
-                style={[
-                  styles.input,
-                  { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' },
-                ]}
-                placeholder="HH:MM"
-                placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-                value={formData.startTime}
-                onChangeText={text => setFormData(p => ({ ...p, startTime: text }))}
-              />
-            </View>
-            {errors.startTime && <Text style={styles.errorText}>{errors.startTime}</Text>}
-          </View>
+        {/* Ubicación */}
+        <LocationField
+          value={formData.location}
+          onChange={text => setFormData(p => ({ ...p, location: text }))}
+          error={errors.location}
+        />
 
-          <View style={[styles.inputContainer, styles.flex1]}>
-            <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>End Time *</Text>
-            <View style={styles.iconInput}>
-              <Clock size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
-              <TextInput
-                style={[
-                  styles.input,
-                  { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' },
-                ]}
-                placeholder="HH:MM"
-                placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-                value={formData.endTime}
-                onChangeText={text => setFormData(p => ({ ...p, endTime: text }))}
-              />
-            </View>
-            {errors.endTime && <Text style={styles.errorText}>{errors.endTime}</Text>}
-          </View>
-        </View>
-
-        {/* Location */}
-        <View style={styles.inputContainer}>
-          <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>Location *</Text>
-          <View style={styles.iconInput}>
-            <MapPin size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
-            <TextInput
-              style={[styles.input, { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' }]}
-              placeholder="Enter location"
-              placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-              value={formData.location}
-              onChangeText={text => setFormData(p => ({ ...p, location: text }))}
-            />
-          </View>
-          {errors.location && <Text style={styles.errorText}>{errors.location}</Text>}
-        </View>
-
+        {/* Errores globales de submit */}
         {errors.submit && <Text style={[styles.errorText, styles.submitError]}>{errors.submit}</Text>}
 
-        <Pressable
-          style={styles.submitButton}
-          onPress={handleSubmit}
-          disabled={isSubmitting || isDeleting}
-        >
-          <Text style={styles.submitButtonText}>
-            {isSubmitting ? 'Saving...' : 'Save Changes'}
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.deleteButton}
-          onPress={confirmDelete}
-          disabled={isSubmitting || isDeleting}
-        >
-          <Text style={styles.deleteButtonText}>
-            {isDeleting ? 'Deleting...' : 'Delete Event'}
-          </Text>
-        </Pressable>
+        {/* Botones Guardar / Borrar */}
+        <SubmitDeleteButtons
+          isSubmitting={isSubmitting}
+          isDeleting={isDeleting}
+          onSubmit={handleSubmit}
+          onConfirmDelete={confirmDelete}
+        />
       </View>
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 18,
-    marginBottom: 16,
-  },
-  backButton: {
-    padding: 12,
-    backgroundColor: '#0A84FF',
-    borderRadius: 8,
-  },
-  backButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  formContainer: {
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  imagePreviewContainer: {
-    height: 200,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 16,
-    position: 'relative',
-  },
-  imagePreview: {
-    width: '100%',
-    height: '100%',
-  },
-  removeImageButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imageUploadButton: {
-    height: 200,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  imageUploadText: {
-    marginTop: 8,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    height: 44,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 16,
-    flex: 1,
-  },
-  textArea: {
-    height: 100,
-    paddingTop: 12,
-    paddingBottom: 12,
-    textAlignVertical: 'top',
-  },
-  categoryContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  categoryChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  categoryChipText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  flex1: {
-    flex: 1,
-  },
-  iconInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#2C2C2E',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-  },
-  errorText: {
-    color: '#FF453A',
-    fontSize: 14,
-    marginTop: 4,
-  },
-  submitError: {
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  submitButton: {
-    backgroundColor: '#0A84FF',
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  deleteButton: {
-    backgroundColor: '#FF3B30', height: 50, borderRadius: 25,
-    alignItems: 'center', justifyContent: 'center', marginTop: 12
-  },
-  deleteButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' }
-});
