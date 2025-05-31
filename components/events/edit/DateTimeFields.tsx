@@ -1,7 +1,7 @@
 // components/events/edit/DateTimeFields.tsx
 
-import React from 'react';
-import { View, Text, TextInput, useColorScheme } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, useColorScheme, Platform } from 'react-native';
 import { Calendar, Clock } from 'lucide-react-native';
 import styles from './editEvent.styles';
 
@@ -12,7 +12,7 @@ interface Props {
   onDateChange: (text: string) => void;
   onStartTimeChange: (text: string) => void;
   onEndTimeChange: (text: string) => void;
-  errors?: {
+  errors: {
     date?: string;
     startTime?: string;
     endTime?: string;
@@ -26,69 +26,109 @@ export function DateTimeFields({
   onDateChange,
   onStartTimeChange,
   onEndTimeChange,
-  errors = {}
+  errors,
 }: Props) {
   const isDark = useColorScheme() === 'dark';
+  const [focusField, setFocusField] = useState<'date' | 'start' | 'end' | null>(null);
 
   return (
-    <>
-      {/* Date */}
+    <View style={styles.dateTimeGroupContainer}>
+      {/* Campo Fecha */}
       <View style={styles.inputContainer}>
         <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>Date *</Text>
-        <View style={styles.iconInput}>
+        <View
+          style={[
+            styles.iconInput,
+            {
+              backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+              borderColor: focusField === 'date' ? '#0A84FF' : '#CCC',
+            },
+          ]}
+        >
           <Calendar size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
           <TextInput
             style={[
               styles.input,
-              { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' }
+              { color: isDark ? '#FFF' : '#000', marginLeft: 8 },
+              Platform.OS === 'web' ? { outlineWidth: 0 } : {},
             ]}
             placeholder="YYYY-MM-DD"
             placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
             value={date}
             onChangeText={onDateChange}
+            onFocus={() => setFocusField('date')}
+            onBlur={() => setFocusField(null)}
           />
         </View>
         {errors.date && <Text style={styles.errorText}>{errors.date}</Text>}
       </View>
 
-      {/* Time (Start / End) */}
-      <View style={[styles.row, { marginBottom: 16 }]}>
-        <View style={[styles.inputContainer, styles.flex1]}>
-          <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>Start Time *</Text>
-          <View style={styles.iconInput}>
+      {/* Campos Hora */}
+      <View style={styles.timeContainer}>
+        {/* Start Time */}
+        <View style={styles.timeFieldWrapper}>
+          <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
+            Start Time *
+          </Text>
+          <View
+            style={[
+              styles.iconInput,
+              {
+                backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+                borderColor: focusField === 'start' ? '#0A84FF' : '#CCC',
+              },
+            ]}
+          >
             <Clock size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
             <TextInput
               style={[
                 styles.input,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' }
+                { color: isDark ? '#FFF' : '#000', marginLeft: 8 },
+                Platform.OS === 'web' ? { outlineWidth: 0 } : {},
               ]}
               placeholder="HH:MM"
               placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
               value={startTime}
               onChangeText={onStartTimeChange}
+              onFocus={() => setFocusField('start')}
+              onBlur={() => setFocusField(null)}
             />
           </View>
           {errors.startTime && <Text style={styles.errorText}>{errors.startTime}</Text>}
         </View>
 
-        <View style={[styles.inputContainer, styles.flex1]}>
-          <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>End Time *</Text>
-          <View style={styles.iconInput}>
+        {/* End Time */}
+        <View style={styles.timeFieldWrapper}>
+          <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
+            End Time *
+          </Text>
+          <View
+            style={[
+              styles.iconInput,
+              {
+                backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+                borderColor: focusField === 'end' ? '#0A84FF' : '#CCC',
+              },
+            ]}
+          >
             <Clock size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
             <TextInput
               style={[
                 styles.input,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', color: isDark ? '#FFF' : '#000' }
+                { color: isDark ? '#FFF' : '#000', marginLeft: 8 },
+                Platform.OS === 'web' ? { outlineWidth: 0 } : {},
               ]}
               placeholder="HH:MM"
               placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
               value={endTime}
               onChangeText={onEndTimeChange}
+              onFocus={() => setFocusField('end')}
+              onBlur={() => setFocusField(null)}
             />
           </View>
           {errors.endTime && <Text style={styles.errorText}>{errors.endTime}</Text>}
         </View>
       </View>
-    </>
+    </View>
   );
 }

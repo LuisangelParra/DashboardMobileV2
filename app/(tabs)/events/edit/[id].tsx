@@ -1,5 +1,4 @@
-// app/(tabs)/events/edit/[id].tsx
-
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -8,7 +7,7 @@ import {
   Pressable,
   useColorScheme,
   ActivityIndicator,
-  Alert
+  Alert,
 } from 'react-native';
 import Constants from 'expo-constants';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -22,19 +21,21 @@ import { CategorySelector } from '@/components/events/edit/CategorySelector';
 import { DateTimeFields } from '@/components/events/edit/DateTimeFields';
 import { LocationField } from '@/components/events/edit/LocationField';
 import { SubmitDeleteButtons } from '@/components/events/edit/SubmitDeleteButtons';
-
-import { EventCategory } from '@/types';
+import { SpeakerPicker } from '@/components/events/edit/SpeakerPicker';
+import { MultiSpeakerPicker } from '@/components/events/edit/MultiSpeakerPicker';
 
 const {
   UNIDB_BASE_URL,
-  UNIDB_CONTRACT_KEY
+  UNIDB_CONTRACT_KEY,
 } = (Constants.expoConfig!.extra as {
   UNIDB_BASE_URL: string;
   UNIDB_CONTRACT_KEY: string;
 });
 const BASE_URL = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`;
 
+/* ---------- tipos crudos ---------- */
 type RawRow<T> = { entry_id: string; data: T & Record<string, any> };
+
 type RawEvent = {
   id: number;
   titulo: string;
@@ -43,25 +44,54 @@ type RawEvent = {
   fecha: string;
   hora_inicio: string;
   hora_fin: string;
-  location: string;
+  lugar: string;
   imageUrl: string;
-  suscritos: number;
-  // plus any other fields
+  ponente: string | null;
+  invitados_especiales: string[];
 };
-type RawEventSpeaker = { event_id: number; speaker_id: number };
+
+type RawTrack = { id: number; nombre: string };
 type RawEventTrack = { event_id: number; track_id: number };
+type RawEventSpeaker = { event_id: number; speaker_id: number };
 
 export default function EditEventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = useColorScheme() === 'dark';
 
+  /* ---------- datos base del evento ---------- */
   const { event, isLoading: loadingEvent } = useEvent(id);
-  const [entryId, setEntryId] = useState<string>('');
+
+  /* ---------- entry_id de la tabla events ---------- */
+  const [entryId, setEntryId] = useState('');
+  useEffect(() => {
+    if (!id) return;
+    (async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/data/events/all?format=json`);
+        const { data } = (await res.json()) as { data: RawRow<RawEvent>[] };
+        const row = data.find(r => String(r.data.id) === id);
+        if (row) setEntryId(row.entry_id);
+      } catch (e) {
+        console.error('entry_id error:', e);
+      }
+    })();
+  }, [id]);
+
+  /* ---------- tracks disponibles & seleccionados ---------- */
+  const [trackNameToId, setTrackNameToId] = useState<Record<string, number>>({});
+  const [allTracks, setAllTracks] = useState<string[]>([]);
+  const [selectedTracks, setSelectedTracks] = useState<string[]>([]);
+
+  /* ---------- ponente principal e invitados ---------- */
+  type SpeakerOption = { id: string; name: string };
+  const [speakerOptions, setSpeakerOptions] = useState<SpeakerOption[]>([]);
+  const [mainSpeakerName, setMainSpeakerName] = useState<string | null>(null);
+  const [guestNames, setGuestNames] = useState<string[]>([]);
+
+  /* ---------- formulario ---------- */
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    category: '' as EventCategory,
     date: '',
     startTime: '',
     endTime: '',
@@ -72,29 +102,65 @@ export default function EditEventScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // 1) Obtener el entry_id correspondiente en UniDB
+  /* ---------- cargar tracks + speakers + ponente/invitados ---------- */
   useEffect(() => {
     if (!id) return;
-    (async () => {
+
+    const loadData = async () => {
       try {
-        const res = await fetch(`${BASE_URL}/data/events/all?format=json`);
-        const json = (await res.json()) as { data: RawRow<RawEvent>[] };
-        const row = json.data.find(r => String(r.data.id) === id);
-        if (row) setEntryId(row.entry_id);
+        /* --- tracks --- */
+        const resT = await fetch(`${BASE_URL}/data/tracks/all?format=json`);
+        const { data: rawT } = (await resT.json()) as { data: RawRow<RawTrack>[] };
+        const map: Record<string, number> = {};
+        const names: string[] = [];
+        rawT.forEach(r => {
+          map[r.data.nombre] = r.data.id;
+          names.push(r.data.nombre);
+        });
+        setTrackNameToId(map);
+        setAllTracks(names);
+
+        /* selected tracks del evento */
+        const resET = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`);
+        const { data: rawET } = (await resET.json()) as { data: RawRow<RawEventTrack>[] };
+        const trackIds = rawET
+          .filter(r => String(r.data.event_id) === id)
+          .map(r => r.data.track_id);
+        const trackNames = trackIds
+          .map(tid => names.find(n => map[n] === tid))
+          .filter((n): n is string => !!n);
+        setSelectedTracks(trackNames);
+
+        /* --- speakers --- */
+        const resS = await fetch(`${BASE_URL}/data/speakers/all?format=json`);
+        const { data: rawS } = (await resS.json()) as { data: RawRow<{ id: number; name: string }>[] };
+        const opts: SpeakerOption[] = rawS.map(r => ({
+          id: String(r.data.id),
+          name: r.data.name,
+        }));
+        setSpeakerOptions(opts);
+
+        /* ponente / invitados guardados (nombres) */
+        const rowEvResponse = await fetch(`${BASE_URL}/data/events/all?format=json`);
+        const { data: allRows } = (await rowEvResponse.json()) as { data: RawRow<RawEvent>[] };
+        const rawEv = allRows.find(r => String(r.data.id) === id)?.data;
+        if (rawEv?.ponente) setMainSpeakerName(rawEv.ponente);
+        if (rawEv?.invitados_especiales) setGuestNames(rawEv.invitados_especiales);
       } catch (err) {
-        console.error('Error fetching entryId:', err);
+        console.error('load tracks/speakers error:', err);
       }
-    })();
+    };
+
+    loadData();
   }, [id]);
 
-  // 2) Popula el formulario con los datos existentes
+  /* ---------- precargar datos cuando llega el evento ---------- */
   useEffect(() => {
     if (!event) return;
     const [startTime, endTime] = event.time.split(' - ');
     setFormData({
       name: event.name,
       description: event.description,
-      category: event.category,
       date: event.date,
       startTime,
       endTime,
@@ -103,63 +169,64 @@ export default function EditEventScreen() {
     });
   }, [event]);
 
-  const categories: EventCategory[] = [
-    'Workshop',
-    'Presentation',
-    'Panel',
-    'Networking',
-    'Other',
-  ];
-
-  // 3) Validación de formulario
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-    if (!formData.name.trim()) newErrors.name = 'Event name is required';
-    if (!formData.description.trim()) newErrors.description = 'Description is required';
-    if (!formData.category) newErrors.category = 'Category is required';
-    if (!formData.date.trim()) newErrors.date = 'Date is required';
-    if (!formData.startTime.trim()) newErrors.startTime = 'Start time is required';
-    if (!formData.endTime.trim()) newErrors.endTime = 'End time is required';
-    if (!formData.location.trim()) newErrors.location = 'Location is required';
-    if (!formData.imageUrl.trim()) newErrors.imageUrl = 'Image URL is required';
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  /* ---------- helpers ---------- */
+  const toggleTrack = (track: string) => {
+    setSelectedTracks(prev =>
+      prev.includes(track) ? prev.filter(t => t !== track) : [...prev, track]
+    );
   };
 
-  // 4) Al presionar “Save Changes”: recupero la fila original, la fusiono y hago PUT
-  const handleSubmit = async () => {
-    if (!validateForm()) return;
-    if (!entryId) {
-      setErrors({ submit: 'Unable to identify event in database.' });
-      return;
+  const toggleGuest = (name: string) => {
+    setGuestNames(prev =>
+      prev.includes(name) ? prev.filter(g => g !== name) : [...prev, name]
+    );
+    if (mainSpeakerName === name) {
+      setMainSpeakerName(null);
     }
+  };
+
+  const validateForm = () => {
+    const e: Record<string, string> = {};
+    if (!formData.name.trim()) e.name = 'Event name is required';
+    if (!formData.description.trim()) e.description = 'Description is required';
+    if (!formData.date.trim()) e.date = 'Date is required';
+    if (!formData.startTime.trim()) e.startTime = 'Start time is required';
+    if (!formData.endTime.trim()) e.endTime = 'End time is required';
+    if (!formData.location.trim()) e.location = 'Location is required';
+    if (!formData.imageUrl.trim()) e.imageUrl = 'Image URL is required';
+    if (selectedTracks.length === 0) e.tracks = 'Select at least one track';
+    if (!mainSpeakerName) e.mainSpeaker = 'Select main speaker';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  /* ---------- submit ---------- */
+  const handleSubmit = async () => {
+    if (!validateForm() || !entryId) return;
     setIsSubmitting(true);
     try {
-      // a) Obtener datos crudos para conservar campos no editables
-      const resRow = await fetch(`${BASE_URL}/data/events/all?format=json`);
-      const { data: rows } = (await resRow.json()) as { data: RawRow<RawEvent>[] };
-      const row = rows.find(r => r.entry_id === entryId);
-      if (!row) throw new Error('Original event data not found');
-      const original = row.data;
+      /* a) conservar resto de campos */
+      const resAll = await fetch(`${BASE_URL}/data/events/all?format=json`);
+      const { data } = (await resAll.json()) as { data: RawRow<RawEvent>[] };
+      const row = data.find(r => r.entry_id === entryId);
+      if (!row) throw new Error('Original event not found');
 
-      // b) Fusionar los campos que sí se editaron
-      const merged = {
-        ...original,
-        titulo:      formData.name,
-        descripcion: formData.description,
-        tema:        formData.category,
-        fecha:       formData.date,
-        hora_inicio: formData.startTime,
-        hora_fin:    formData.endTime,
-        location:    formData.location,
-        imageUrl:    formData.imageUrl,
-        // Dejamos intactos todos los demás campos (ponente, invitados_especiales, modalidad, etc.)
+      /* b) PUT a events */
+      const payload = {
+        data: {
+          ...row.data,
+          titulo:               formData.name,
+          descripcion:          formData.description,
+          fecha:                formData.date,
+          hora_inicio:          formData.startTime,
+          hora_fin:             formData.endTime,
+          lugar:                formData.location,
+          imageUrl:             formData.imageUrl,
+          ponente:              mainSpeakerName,
+          invitados_especiales: guestNames,
+        },
       };
-
-      const payload = { data: merged };
-
-      // c) Enviar PUT a UniDB
-      const res = await fetch(
+      const putRes = await fetch(
         `${BASE_URL}/data/events/update/${entryId}`,
         {
           method: 'PUT',
@@ -167,23 +234,39 @@ export default function EditEventScreen() {
           body: JSON.stringify(payload),
         }
       );
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(JSON.stringify(err));
+      if (!putRes.ok) throw new Error('PUT failed');
+
+      /* c) sincronizar event_tracks */
+      const relRes = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`);
+      const { data: relRows } = (await relRes.json()) as { data: RawRow<RawEventTrack>[] };
+      const oldRows = relRows.filter(r => String(r.data.event_id) === id);
+      for (const r of oldRows) {
+        await fetch(`${BASE_URL}/data/event_tracks/delete/${r.entry_id}`, { method: 'DELETE' });
+      }
+      for (const trkName of selectedTracks) {
+        const trkId = trackNameToId[trkName];
+        if (!trkId) continue;
+        await fetch(`${BASE_URL}/data/store`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            table_name: 'event_tracks',
+            data: { event_id: Number(id), track_id: trkId },
+          }),
+        });
       }
 
-      // Volver atrás (y, si tienes un reload en useEvent, se refrescará la vista detalle)
-      router.back();
-    } catch (error) {
-      console.error('Error updating event:', error);
-      setErrors({ submit: 'Failed to update event. Please try again.' });
+      router.back(); // el detalle se refresca con useEvent.reload
+    } catch (err) {
+      console.error('submit error:', err);
+      Alert.alert('Error', 'Failed to update event.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // 5) Confirmar delete con diálogo nativo
-  const confirmDelete = () => {
+  /* ---------- eliminar ---------- */
+  const confirmDelete = () =>
     Alert.alert(
       'Delete Event',
       'Are you sure you want to delete this event and all its relations?',
@@ -192,63 +275,45 @@ export default function EditEventScreen() {
         { text: 'Delete', style: 'destructive', onPress: handleDelete },
       ]
     );
-  };
 
-  // 6) Eliminar relaciones y el evento
   const handleDelete = async () => {
-    if (!id || !entryId) {
-      Alert.alert('Error', 'Missing event identifier.');
-      return;
-    }
+    if (!entryId) return;
     setIsDeleting(true);
     try {
-      // a) Borrar event_speakers
+      // borrar event_tracks
+      const rel = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`);
+      const { data: rT } = (await rel.json()) as { data: RawRow<RawEventTrack>[] };
+      for (const r of rT.filter(r => String(r.data.event_id) === id)) {
+        await fetch(`${BASE_URL}/data/event_tracks/delete/${r.entry_id}`, { method: 'DELETE' });
+      }
+      // borrar event_speakers
       const relS = await fetch(`${BASE_URL}/data/event_speakers/all?format=json`);
-      const { data: rs } = (await relS.json()) as { data: RawRow<RawEventSpeaker>[] };
-      for (const r of rs.filter(r => String(r.data.event_id) === id)) {
-        await fetch(
-          `${BASE_URL}/data/event_speakers/delete/${r.entry_id}`,
-          { method: 'DELETE' }
-        );
+      const { data: rS } = (await relS.json()) as { data: RawRow<RawEventSpeaker>[] };
+      for (const r of rS.filter(r => String(r.data.event_id) === id)) {
+        await fetch(`${BASE_URL}/data/event_speakers/delete/${r.entry_id}`, { method: 'DELETE' });
       }
-
-      // b) Borrar event_tracks
-      const relT = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`);
-      const { data: rt } = (await relT.json()) as { data: RawRow<RawEventTrack>[] };
-      for (const r of rt.filter(r => String(r.data.event_id) === id)) {
-        await fetch(
-          `${BASE_URL}/data/event_tracks/delete/${r.entry_id}`,
-          { method: 'DELETE' }
-        );
-      }
-
-      // c) Borrar el evento
-      const resDel = await fetch(
-        `${BASE_URL}/data/events/delete/${entryId}`,
-        { method: 'DELETE' }
-      );
-      if (!resDel.ok) throw new Error('Failed to delete event');
+      // borrar evento
+      const del = await fetch(`${BASE_URL}/data/events/delete/${entryId}`, { method: 'DELETE' });
+      if (!del.ok) throw new Error('delete failed');
 
       router.back();
     } catch (err) {
-      console.error('Error deleting event:', err);
-      Alert.alert('Error', 'Failed to delete event. Please try again.');
+      console.error('delete error:', err);
+      Alert.alert('Error', 'Failed to delete event.');
     } finally {
       setIsDeleting(false);
     }
   };
 
-  // 7) Mostrar indicador mientras carga
-  if (loadingEvent) {
+  /* ---------- loading / error ---------- */
+  if (loadingEvent)
     return (
       <View style={[styles.loadingContainer, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
         <ActivityIndicator size="large" color="#0A84FF" />
       </View>
     );
-  }
 
-  // 8) Si no existe el evento
-  if (!event) {
+  if (!event)
     return (
       <View style={[styles.errorContainer, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
         <Text style={[styles.errorText, { color: isDark ? '#FFF' : '#000' }]}>
@@ -259,9 +324,8 @@ export default function EditEventScreen() {
         </Pressable>
       </View>
     );
-  }
 
-  // 9) Render del formulario completo, usando los componentes divididos
+  /* ---------- render ---------- */
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}
@@ -292,28 +356,45 @@ export default function EditEventScreen() {
           error={errors.description}
         />
 
-        {/* Categoría */}
+        {/* TRACKS */}
         <CategorySelector
-          label="Category *"
-          options={categories}
-          selected={formData.category}
-          onSelect={opt => setFormData(p => ({ ...p, category: opt }))}
-          error={errors.category}
+          label="Tracks *"
+          options={allTracks}
+          selected={selectedTracks}
+          onSelect={toggleTrack}
+          error={errors.tracks}
         />
 
-        {/* Fecha y Horario */}
+        {/* PONENTE PRINCIPAL */}
+        <SpeakerPicker
+          label="Main Speaker *"
+          options={speakerOptions}
+          selected={mainSpeakerName}
+          onSelect={name => {
+            setMainSpeakerName(name);
+            // si estaba en invitados, quitarlo
+            if (guestNames.includes(name)) toggleGuest(name);
+          }}
+          error={errors.mainSpeaker}
+        />
+
+        {/* INVITADOS ESPECIALES */}
+        <MultiSpeakerPicker
+          label="Special Guests"
+          options={speakerOptions.filter(s => s.name !== mainSpeakerName)}
+          selected={guestNames}
+          onSelect={toggleGuest}
+        />
+
+        {/* Fecha y hora */}
         <DateTimeFields
           date={formData.date}
           startTime={formData.startTime}
           endTime={formData.endTime}
-          onDateChange={text => setFormData(p => ({ ...p, date: text }))}
-          onStartTimeChange={text => setFormData(p => ({ ...p, startTime: text }))}
-          onEndTimeChange={text => setFormData(p => ({ ...p, endTime: text }))}
-          errors={{
-            date: errors.date,
-            startTime: errors.startTime,
-            endTime: errors.endTime
-          }}
+          onDateChange={d => setFormData(p => ({ ...p, date: d }))}
+          onStartTimeChange={t => setFormData(p => ({ ...p, startTime: t }))}
+          onEndTimeChange={t => setFormData(p => ({ ...p, endTime: t }))}
+          errors={{ date: errors.date, startTime: errors.startTime, endTime: errors.endTime }}
         />
 
         {/* Ubicación */}
@@ -323,10 +404,9 @@ export default function EditEventScreen() {
           error={errors.location}
         />
 
-        {/* Errores globales de submit */}
         {errors.submit && <Text style={[styles.errorText, styles.submitError]}>{errors.submit}</Text>}
 
-        {/* Botones Guardar / Borrar */}
+        {/* Botones */}
         <SubmitDeleteButtons
           isSubmitting={isSubmitting}
           isDeleting={isDeleting}

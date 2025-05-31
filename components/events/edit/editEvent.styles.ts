@@ -1,6 +1,4 @@
-// components/events/edit/editEvent.styles.ts
-
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 
 export default StyleSheet.create({
   container: {
@@ -85,17 +83,25 @@ export default StyleSheet.create({
     marginBottom: 8,
   },
   input: {
-    height: 44,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 16,
-    flex: 1,
+  height: 44,
+  borderRadius: 8,
+  paddingHorizontal: 12,
+  fontSize: 16,
+  flex: 1,              // Permitimos que crezca con flex
+  marginLeft: 0,        // Ya no empujamos a TextInput hacia la derecha
   },
   textArea: {
     height: 100,
     paddingTop: 12,
     paddingBottom: 12,
     textAlignVertical: 'top',
+
+    // ** Solo en web, quitar outline por defecto **
+    ...Platform.select({
+      web: {
+        outlineWidth: 0,
+      },
+    }),
   },
   categoryContainer: {
     flexDirection: 'row',
@@ -118,13 +124,16 @@ export default StyleSheet.create({
   flex1: {
     flex: 1,
   },
+  // —————— Input con icono ——————
   iconInput: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#2C2C2E',
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CCC',
     paddingHorizontal: 12,
+    height: 44,
+    // NO poner width fijo aquí, lo define el componente padre (ver arriba)
   },
   submitError: {
     textAlign: 'center',
@@ -154,5 +163,69 @@ export default StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+
+  /* ---------- Estilos para dropdown ---------- */
+  dropdownInput: {
+    borderRadius: 8,
+    justifyContent: 'center',
+    height: 44,
+    marginBottom: 0,
+  },
+  dropdownListContainer: {
+    maxHeight: 160,
+    borderRadius: 8,
+    marginTop: 4,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#CCC',
+  },
+  dropdownItem: {
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+
+  /* ---------- Estilos para tags (invitados) ---------- */
+  tagContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+    /* Contenedor genérico para TextInputs sin ícono */
+  textFieldContainer: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CCC',
+    height: 44,
+    justifyContent: 'center',
+  },
+  /* Contenedor para TextArea */
+  textAreaContainer: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CCC',
+    justifyContent: 'center',
+  },
+    /* -------------- DateTimeFields -------------- */
+  dateTimeGroupContainer: {
+    marginBottom: 16,
+  },
+  timeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  timeFieldWrapper: {
+    flex: 1,
+    minWidth: 140, // un ancho mínimo razonable para que no quede demasiado estrecho
   },
 });

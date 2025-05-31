@@ -1,15 +1,15 @@
-// components/events/edit/CategorySelector.tsx
-
 import React from 'react';
 import { View, Text, Pressable, useColorScheme } from 'react-native';
 import styles from './editEvent.styles';
-import { EventCategory } from '@/types';
 
 interface Props {
   label: string;
-  options: EventCategory[];
-  selected: EventCategory | null;
-  onSelect: (c: EventCategory) => void;
+  /** Lista completa de tracks disponibles */
+  options: string[];
+  /** Tracks actualmente seleccionados */
+  selected: string[];
+  /** Toggle: agrega o quita el track pulsado */
+  onSelect: (track: string) => void;
   error?: string;
 }
 
@@ -18,7 +18,7 @@ export function CategorySelector({
   options,
   selected,
   onSelect,
-  error
+  error,
 }: Props) {
   const isDark = useColorScheme() === 'dark';
 
@@ -27,32 +27,38 @@ export function CategorySelector({
       <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
         {label}
       </Text>
+
       <View style={styles.categoryContainer}>
-        {options.map(opt => (
-          <Pressable
-            key={opt}
-            style={[
-              styles.categoryChip,
-              {
-                backgroundColor:
-                  selected === opt ? '#0A84FF' : isDark ? '#2C2C2E' : '#F2F2F7'
-              }
-            ]}
-            onPress={() => onSelect(opt)}
-          >
-            <Text
+        {options.map(opt => {
+          const isSelected = selected.includes(opt);
+          return (
+            <Pressable
+              key={opt}
               style={[
-                styles.categoryChipText,
+                styles.categoryChip,
                 {
-                  color: selected === opt ? '#FFF' : isDark ? '#FFF' : '#000'
-                }
+                  backgroundColor: isSelected
+                    ? '#0A84FF'
+                    : isDark
+                    ? '#2C2C2E'
+                    : '#F2F2F7',
+                },
               ]}
+              onPress={() => onSelect(opt)}
             >
-              {opt}
-            </Text>
-          </Pressable>
-        ))}
+              <Text
+                style={[
+                  styles.categoryChipText,
+                  { color: isSelected ? '#FFF' : isDark ? '#FFF' : '#000' },
+                ]}
+              >
+                {opt}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
+
       {error && <Text style={styles.errorText}>{error}</Text>}
     </View>
   );

@@ -1,5 +1,3 @@
-// components/events/edit/TextField.tsx
-
 import React from 'react';
 import { View, Text, TextInput, useColorScheme } from 'react-native';
 import styles from './editEvent.styles';
@@ -7,10 +5,9 @@ import styles from './editEvent.styles';
 interface Props {
   label: string;
   value: string;
-  placeholder: string;
+  placeholder?: string;
   onChange: (text: string) => void;
   error?: string;
-  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
 }
 
 export function TextField({
@@ -19,7 +16,6 @@ export function TextField({
   placeholder,
   onChange,
   error,
-  keyboardType = 'default'
 }: Props) {
   const isDark = useColorScheme() === 'dark';
 
@@ -28,20 +24,20 @@ export function TextField({
       <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
         {label}
       </Text>
-      <TextInput
+      <View
         style={[
-          styles.input,
-          {
-            backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
-            color: isDark ? '#FFF' : '#000'
-          }
+          styles.textFieldContainer,
+          { backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7' },
         ]}
-        placeholder={placeholder}
-        placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
-        value={value}
-        onChangeText={onChange}
-        keyboardType={keyboardType}
-      />
+      >
+        <TextInput
+          style={[styles.input, { color: isDark ? '#FFF' : '#000', flex: 1 }]}
+          placeholder={placeholder}
+          placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
+          value={value}
+          onChangeText={onChange}
+        />
+      </View>
       {error && <Text style={styles.errorText}>{error}</Text>}
     </View>
   );
