@@ -12,6 +12,7 @@ export type Event = {
   imageUrl: string;
   rating: number;
   ratingCount: number;
+  tracks: EventCategory[];  
 };
 
 // Speaker types
