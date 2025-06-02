@@ -12,11 +12,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Search, Plus, Filter } from 'lucide-react-native';
 import styles from '@/components/events/events.styles';
 import { useEvents } from '@/hooks/useEvents';
 import { EventCard } from '@/components/events/EventCard';
+import { Event } from '@/types';
 import Constants from 'expo-constants';
 
 const {
@@ -38,13 +39,47 @@ export default function EventsScreen() {
   const isFocused = useIsFocused();
   const isDark = useColorScheme() === 'dark';
 
+  // ✅ Recibir parámetros optimistas
+  const { newEvent, _timestamp } = useLocalSearchParams<{ 
+    newEvent?: string; 
+    _timestamp?: string; 
+  }>();
+
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   // tracks seleccionados (multi-select)
   const [selectedTracks, setSelectedTracks] = useState<string[]>([]);
 
-  // Lista de eventos (filtrada por search en useEvents)
-  const { events, isLoading: loadingEvents, refresh } = useEvents({ search, category: null });
+  // ✅ Estado para evento optimista
+  const [optimisticEvent, setOptimisticEvent] = useState<Event | null>(null);
+
+  // ✅ Manejar nuevo evento optimista
+  useEffect(() => {
+    if (newEvent) {
+      try {
+        const eventData = JSON.parse(newEvent);
+        console.log('🎯 Received new event:', eventData.name);
+        setOptimisticEvent(eventData);
+        
+        // ✅ Limpiar evento optimista después de sincronización
+        const timeoutId = setTimeout(() => {
+          console.log('🔄 Clearing optimistic event after sync...');
+          setOptimisticEvent(null);
+        }, 3000); // 3 segundos para que se vea el evento antes de que se sincronice
+        
+        return () => clearTimeout(timeoutId);
+      } catch (error) {
+        console.error('❌ Error parsing new event:', error);
+      }
+    }
+  }, [newEvent]);
+
+  // Lista de eventos (filtrada por search en useEvents) + evento optimista
+  const { events, isLoading: loadingEvents, refresh } = useEvents({ 
+    search, 
+    category: null,
+    optimisticEvent
+  });
 
   // Traemos tabla tracks
   const [tracks, setTracks] = useState<{ id: string; nombre: string }[]>([]);
@@ -83,10 +118,12 @@ export default function EventsScreen() {
     })();
   }, []);
 
-  // Refresca al volver al foco
+  // Refresca al volver al foco (solo si no hay evento optimista para evitar borrar el nuevo)
   useEffect(() => {
-    if (isFocused) refresh();
-  }, [isFocused, refresh]);
+    if (isFocused && !newEvent) {
+      refresh();
+    }
+  }, [isFocused, refresh, newEvent]);
 
   // Mapa de evento → lista de track IDs
   const eventTracksMap = useMemo(() => {
@@ -117,6 +154,14 @@ export default function EventsScreen() {
         : [...prev, trackId]
     );
   };
+
+  // ✅ Renderizar cada evento con key única mejorada
+  const renderEvent = ({ item, index }: { item: Event; index: number }) => (
+    <EventCard 
+      key={`event-${item.id}-${item.name}-${index}`} // ✅ Key única más robusta
+      item={item} 
+    />
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
@@ -158,7 +203,7 @@ export default function EventsScreen() {
                 const selected = selectedTracks.includes(track.id);
                 return (
                   <Pressable
-                    key={track.id}
+                    key={`track-filter-${track.id}`} // ✅ Key única para filtros
                     style={[
                       styles.categoryChip,
                       {
@@ -189,6 +234,34 @@ export default function EventsScreen() {
         </View>
       )}
 
+      {/* ✅ Banner de evento optimista */}
+      {optimisticEvent && (
+        <View style={[
+          styles.optimisticBanner,
+          { 
+            backgroundColor: 'rgba(0, 122, 255, 0.1)',
+            marginHorizontal: 16,
+            marginBottom: 8,
+            padding: 12,
+            borderRadius: 8,
+            borderLeftWidth: 4,
+            borderLeftColor: '#007AFF'
+          }
+        ]}>
+          <Text style={[
+            styles.optimisticText,
+            { 
+              color: '#007AFF',
+              fontSize: 14,
+              fontWeight: '600',
+              textAlign: 'center'
+            }
+          ]}>
+            ✨ Event created successfully! Syncing with database...
+          </Text>
+        </View>
+      )}
+
       {/* Listado */}
       {(loadingEvents || loadingRel) ? (
         <View style={styles.loadingContainer}>
@@ -197,14 +270,27 @@ export default function EventsScreen() {
       ) : (
         <FlatList
           data={filteredEvents}
-          renderItem={({ item }) => <EventCard item={item} />}
-          keyExtractor={item => item.id}
+          renderItem={renderEvent}
+          keyExtractor={(item, index) => `event-list-${item.id}-${index}`} // ✅ Key única para FlatList
           contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
               <Text style={[styles.emptyText, { color: isDark ? '#FFF' : '#000' }]}>
-                No events found
+                {search || selectedTracks.length > 0 ? 'No events match your filters' : 'No events found'}
               </Text>
+              {!search && selectedTracks.length === 0 && (
+                <Text style={[
+                  styles.emptySubText, 
+                  { 
+                    color: isDark ? '#8E8E93' : '#666',
+                    fontSize: 14,
+                    textAlign: 'center',
+                    marginTop: 8
+                  }
+                ]}>
+                  Create your first event to get started
+                </Text>
+              )}
             </View>
           )}
         />

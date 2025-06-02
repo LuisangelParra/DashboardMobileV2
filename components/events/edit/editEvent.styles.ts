@@ -19,8 +19,9 @@ export default StyleSheet.create({
     padding: 20,
   },
   errorText: {
-    fontSize: 18,
-    marginBottom: 16,
+    fontSize: 12,
+    color: '#FF453A',
+    marginTop: 4,
   },
   backButton: {
     padding: 12,
@@ -40,6 +41,8 @@ export default StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  
+  // Imagen
   imagePreviewContainer: {
     height: 200,
     borderRadius: 12,
@@ -74,6 +77,8 @@ export default StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  
+  // Inputs generales
   inputContainer: {
     marginBottom: 16,
   },
@@ -82,27 +87,62 @@ export default StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
   },
-  input: {
-  height: 44,
-  borderRadius: 8,
-  paddingHorizontal: 12,
-  fontSize: 16,
-  flex: 1,              // Permitimos que crezca con flex
-  marginLeft: 0,        // Ya no empujamos a TextInput hacia la derecha
-  },
-  textArea: {
-    height: 100,
-    paddingTop: 12,
-    paddingBottom: 12,
-    textAlignVertical: 'top',
-
-    // ** Solo en web, quitar outline por defecto **
+  
+  // Input simple (TextField)
+  textFieldInput: {
+    height: 44,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    borderWidth: 1,
     ...Platform.select({
       web: {
-        outlineWidth: 0,
+        outlineStyle: 'none',
       },
     }),
   },
+  
+  // TextArea
+  textAreaInput: {
+    minHeight: 100,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+    borderWidth: 1,
+    textAlignVertical: 'top',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+        fontFamily: 'system-ui',
+      },
+    }),
+  },
+  
+  // Input con ícono (para fecha, hora, ubicación)
+  iconInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  input: {
+    height: 44,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    flex: 1,
+    marginLeft: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
+  },
+  
+  // Categorías/Chips
   categoryContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -117,6 +157,8 @@ export default StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  
+  // Layout
   row: {
     flexDirection: 'row',
     gap: 16,
@@ -124,53 +166,30 @@ export default StyleSheet.create({
   flex1: {
     flex: 1,
   },
-  // —————— Input con icono ——————
-  iconInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#CCC',
-    paddingHorizontal: 12,
-    height: 44,
-    // NO poner width fijo aquí, lo define el componente padre (ver arriba)
-  },
-  submitError: {
-    textAlign: 'center',
+  
+  // DateTime específico
+  dateTimeGroupContainer: {
     marginBottom: 16,
   },
-  submitButton: {
-    backgroundColor: '#0A84FF',
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
+  timeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
   },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+  timeFieldWrapper: {
+    flex: 1,
+    minWidth: 140,
   },
-  deleteButton: {
-    backgroundColor: '#FF3B30',
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-  },
-  deleteButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-
-  /* ---------- Estilos para dropdown ---------- */
+  
+  // Dropdown (para speakers)
   dropdownInput: {
     borderRadius: 8,
     justifyContent: 'center',
     height: 44,
     marginBottom: 0,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#CCC',
   },
   dropdownListContainer: {
     maxHeight: 160,
@@ -185,8 +204,8 @@ export default StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
-
-  /* ---------- Estilos para tags (invitados) ---------- */
+  
+  // Tags (invitados)
   tagContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -200,7 +219,40 @@ export default StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
   },
-    /* Contenedor genérico para TextInputs sin ícono */
+  
+  // Botones de acción
+  submitError: {
+    textAlign: 'center',
+    marginBottom: 16,
+    color: '#FF453A',
+  },
+  submitButton: {
+    backgroundColor: '#0A84FF',
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  deleteButton: {
+    backgroundColor: '#FF3B30',
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  
+  // Contenedores legacy (para compatibilidad)
   textFieldContainer: {
     borderRadius: 8,
     borderWidth: 1,
@@ -208,24 +260,21 @@ export default StyleSheet.create({
     height: 44,
     justifyContent: 'center',
   },
-  /* Contenedor para TextArea */
   textAreaContainer: {
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#CCC',
     justifyContent: 'center',
   },
-    /* -------------- DateTimeFields -------------- */
-  dateTimeGroupContainer: {
-    marginBottom: 16,
-  },
-  timeContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-  },
-  timeFieldWrapper: {
-    flex: 1,
-    minWidth: 140, // un ancho mínimo razonable para que no quede demasiado estrecho
+  textArea: {
+    height: 100,
+    paddingTop: 12,
+    paddingBottom: 12,
+    textAlignVertical: 'top',
+    ...Platform.select({
+      web: {
+        outlineWidth: 0,
+      },
+    }),
   },
 });

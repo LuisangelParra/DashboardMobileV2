@@ -80,11 +80,10 @@ export function SpeakerPicker({
         >
           <FlatList
             data={filtered}
-            keyExtractor={item => item.id}
+            keyExtractor={(item, index) => `speaker-${item.id || index}-${item.name || 'unknown'}`}
             keyboardShouldPersistTaps="handled"
-            renderItem={({ item, index }) => (
+            renderItem={({ item }) => (
               <Pressable
-                key={`${item.id}-${item.name}-${index}`}
                 style={[
                   styles.dropdownItem,
                   { backgroundColor: isDark ? '#2C2C2E' : '#FFF' },

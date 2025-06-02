@@ -1,5 +1,6 @@
 // hooks/useEvents.ts
 import { useState, useEffect, useCallback } from 'react'
+import { useFocusEffect } from '@react-navigation/native'
 import Constants from 'expo-constants'
 import { Event, EventCategory } from '@/types'
 
@@ -19,13 +20,16 @@ type RawEvent = {
   titulo: string
   descripcion: string
   tema: string
-  ponente_id: number
-  fecha: string       // "YYYY-MM-DD"
-  hora_inicio: string // "HH:MM"
-  hora_fin: string    // "HH:MM"
+  ponente: string
+  invitados_especiales: string[]
+  modalidad: string
+  lugar: string
+  plataforma?: string
+  fecha: string
+  hora_inicio: string
+  hora_fin: string
   max_participantes: number
   suscritos: number
-  lugar: string       // <–– corregido aquí
   imageUrl: string
 }
 
@@ -55,25 +59,45 @@ export function useEvents(params: {
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchAll = useCallback(async () => {
+    console.log('🔄 useEvents: Fetching events...')
     setIsLoading(true)
     try {
+      // Agregar timestamp para evitar cache
+      const timestamp = Date.now()
+      
       // 1) Leer todos los eventos
-      const resE = await fetch(`${BASE_URL}/data/events/all?format=json`)
+      const resE = await fetch(`${BASE_URL}/data/events/all?format=json&t=${timestamp}`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      })
       const { data: rawE } = (await resE.json()) as { data: RawRow<RawEvent>[] }
+      console.log('📊 useEvents: Raw events loaded:', rawE.length)
 
       // 2) Leer todos los feedbacks
-      const resF = await fetch(`${BASE_URL}/data/feedbacks/all?format=json`)
+      const resF = await fetch(`${BASE_URL}/data/feedbacks/all?format=json&t=${timestamp}`)
       const { data: rawF } = (await resF.json()) as { data: RawRow<RawFeedback>[] }
 
       // 3) Leer todos los tracks
-      const resT = await fetch(`${BASE_URL}/data/tracks/all?format=json`)
+      const resT = await fetch(`${BASE_URL}/data/tracks/all?format=json&t=${timestamp}`)
       const { data: rawT } = (await resT.json()) as { data: RawRow<RawTrack>[] }
 
       // 4) Leer todas las relaciones event_tracks
-      const resET = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`)
+      const resET = await fetch(`${BASE_URL}/data/event_tracks/all?format=json&t=${timestamp}`)
       const { data: rawET } = (await resET.json()) as { data: RawRow<RawEventTrack>[] }
 
-      // 5) Agrupar feedbacks por event_id
+      // 5) Eliminar duplicados de eventos usando Map
+      const eventMap = new Map<number, RawEvent>()
+      rawE.forEach(r => {
+        if (!eventMap.has(r.data.id)) {
+          eventMap.set(r.data.id, r.data)
+        }
+      })
+      const uniqueEventsList = Array.from(eventMap.values())
+      console.log('📊 useEvents: Unique events after deduplication:', uniqueEventsList.length)
+
+      // 6) Agrupar feedbacks por event_id
       const feedbackByEvent: Record<number, RawFeedback[]> = {}
       rawF.forEach(r => {
         const fb = r.data
@@ -81,13 +105,13 @@ export function useEvents(params: {
         feedbackByEvent[fb.event_id].push(fb)
       })
 
-      // 6) Crear un mapa de trackId → nombre
+      // 7) Crear un mapa de trackId → nombre
       const trackMap: Record<number, string> = {}
       rawT.forEach(r => {
         trackMap[r.data.id] = r.data.nombre
       })
 
-      // 7) Agrupar track IDs por event_id
+      // 8) Agrupar track IDs por event_id
       const tracksByEvent: Record<number, number[]> = {}
       rawET.forEach(r => {
         const { event_id, track_id } = r.data
@@ -95,9 +119,8 @@ export function useEvents(params: {
         tracksByEvent[event_id].push(track_id)
       })
 
-      // 8) Mapear cada evento crudo a nuestro tipo Event (incluyendo cálculo de rating y asignar `location` = e.lugar)
-      const mapped = rawE.map(r => {
-        const e = r.data
+      // 9) Mapear cada evento crudo a nuestro tipo Event
+      const mapped = uniqueEventsList.map(e => {
         const fList = feedbackByEvent[e.id] || []
         const count = fList.length
         const avg = count > 0
@@ -121,15 +144,15 @@ export function useEvents(params: {
             year: 'numeric'
           }),
           time: `${e.hora_inicio} - ${e.hora_fin}`,
-          location: e.lugar,       // <–– aquí usamos “lugar”
+          location: e.lugar,
           imageUrl: e.imageUrl,
           rating: avg,
           ratingCount: count,
-          tracks: trackNames     // <–– arreglo de EventCategory basado en la tabla event_tracks ↔ tracks
+          tracks: trackNames
         }
       })
 
-      // 9) Aplicar filtros de búsqueda y categoría (tracks)
+      // 10) Aplicar filtros de búsqueda y categoría
       let filtered = mapped
       if (params.search) {
         const q = params.search.toLowerCase()
@@ -144,17 +167,35 @@ export function useEvents(params: {
         )
       }
 
+      // 11) Ordenar por fecha (más recientes primero)
+      filtered.sort((a, b) => {
+        const dateA = new Date(a.date)
+        const dateB = new Date(b.date)
+        return dateB.getTime() - dateA.getTime()
+      })
+
+      console.log('✅ useEvents: Final filtered events:', filtered.length)
       setEvents(filtered)
     } catch (err) {
-      console.error('useEvents error:', err)
+      console.error('❌ useEvents error:', err)
+      setEvents([])
     } finally {
       setIsLoading(false)
     }
   }, [params.search, params.category])
 
+  // Ejecutar al montar y cuando cambien los parámetros
   useEffect(() => {
     fetchAll()
   }, [fetchAll])
+
+  // Recargar automáticamente cuando la pantalla reciba el foco
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🎯 Events screen focused - refreshing data')
+      fetchAll()
+    }, [fetchAll])
+  )
 
   return {
     events,
