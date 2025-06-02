@@ -5,12 +5,13 @@ import { X, ImagePlus } from 'lucide-react-native';
 import { EventCategory } from '@/types';
 import { TextField } from '@/components/events/edit/TextField';
 import { TextAreaField } from '@/components/events/edit/TextAreaField';
-import { DateTimeFields } from '@/components/events/edit/DateTimeFields';
+import { DatePickerField } from '@/components/events/edit/DatePickerField';
+import { TimePickerField } from '@/components/events/edit/TimePickerField';
 import { LocationField } from '@/components/events/edit/LocationField';
+import { PlatformField } from '@/components/events/edit/PlatformField';
 import { SpeakerPicker } from '@/components/events/edit/SpeakerPicker';
 import { MultiSpeakerPicker } from '@/components/events/edit/MultiSpeakerPicker';
 import { CategorySelector } from '@/components/events/edit/CategorySelector';
-
 import Constants from 'expo-constants';
 
 const {
@@ -57,45 +58,7 @@ export default function CreateEventScreen() {
   
   const modalityOptions: ModalityType[] = ['Presencial', 'Virtual', 'Hibrida'];
 
-  // Función helper para formatear fecha automáticamente
-  const formatDateInput = (input: string): string => {
-    const numbers = input.replace(/\D/g, '');
-    
-    if (numbers.length >= 8) {
-      const year = numbers.slice(0, 4);
-      const month = numbers.slice(4, 6);
-      const day = numbers.slice(6, 8);
-      return `${year}-${month}-${day}`;
-    } else if (numbers.length >= 6) {
-      const year = numbers.slice(0, 4);
-      const month = numbers.slice(4, 6);
-      const day = numbers.slice(6);
-      return `${year}-${month}-${day}`;
-    } else if (numbers.length >= 4) {
-      const year = numbers.slice(0, 4);
-      const month = numbers.slice(4);
-      return `${year}-${month}`;
-    }
-    return numbers;
-  };
-
-  // Función helper para formatear hora automáticamente
-  const formatTimeInput = (input: string): string => {
-    const numbers = input.replace(/\D/g, '');
-    
-    if (numbers.length >= 4) {
-      const hours = numbers.slice(0, 2);
-      const minutes = numbers.slice(2, 4);
-      return `${hours}:${minutes}`;
-    } else if (numbers.length >= 2) {
-      const hours = numbers.slice(0, 2);
-      const minutes = numbers.slice(2);
-      return `${hours}:${minutes}`;
-    }
-    return numbers;
-  };
-
-  // Validación mejorada de fecha
+  // ✅ VALIDACIONES MEJORADAS
   const validateDate = (date: string): string | null => {
     if (!date.trim()) return 'La fecha es requerida';
     
@@ -105,6 +68,10 @@ export default function CreateEventScreen() {
     }
     
     const [year, month, day] = date.split('-').map(Number);
+    
+    if (year < 2024 || year > 2030) {
+      return 'El año debe estar entre 2024 y 2030';
+    }
     
     if (month < 1 || month > 12) {
       return 'El mes debe estar entre 01 y 12';
@@ -118,7 +85,7 @@ export default function CreateEventScreen() {
     if (parsedDate.getFullYear() !== year || 
         parsedDate.getMonth() !== month - 1 || 
         parsedDate.getDate() !== day) {
-      return 'Fecha inválida';
+      return 'Fecha inválida (día no existe en ese mes)';
     }
     
     const today = new Date();
@@ -132,7 +99,6 @@ export default function CreateEventScreen() {
     return null;
   };
 
-  // Validación mejorada de hora
   const validateTime = (time: string): string | null => {
     if (!time.trim()) return 'La hora es requerida';
     
@@ -154,9 +120,12 @@ export default function CreateEventScreen() {
     return null;
   };
 
-  // Validación de rango de tiempo
   const validateTimeRange = (startTime: string, endTime: string): string | null => {
-    if (!startTime || !endTime) return null;
+    // Primero validar que ambas horas sean válidas
+    const startError = validateTime(startTime);
+    const endError = validateTime(endTime);
+    
+    if (startError || endError) return null; // No validar rango si las horas individuales son inválidas
     
     const [startHour, startMin] = startTime.split(':').map(Number);
     const [endHour, endMin] = endTime.split(':').map(Number);
@@ -179,6 +148,43 @@ export default function CreateEventScreen() {
     return null;
   };
 
+  // ✅ VALIDACIÓN EN TIEMPO REAL PARA HORAS
+  const handleStartTimeChange = (time: string) => {
+    setFormData(prev => ({ ...prev, hora_inicio: time }));
+    
+    // Limpiar errores previos
+    if (errors.hora_inicio) {
+      setErrors(prev => ({ ...prev, hora_inicio: '' }));
+    }
+    
+    // Validar rango si ambas horas están completas
+    if (time && formData.hora_fin && validateTime(time) === null && validateTime(formData.hora_fin) === null) {
+      const rangeError = validateTimeRange(time, formData.hora_fin);
+      if (rangeError) {
+        setErrors(prev => ({ ...prev, hora_fin: rangeError }));
+      } else {
+        setErrors(prev => ({ ...prev, hora_fin: '' }));
+      }
+    }
+  };
+
+  const handleEndTimeChange = (time: string) => {
+    setFormData(prev => ({ ...prev, hora_fin: time }));
+    
+    // Limpiar errores previos
+    if (errors.hora_fin) {
+      setErrors(prev => ({ ...prev, hora_fin: '' }));
+    }
+    
+    // Validar rango si ambas horas están completas
+    if (time && formData.hora_inicio && validateTime(formData.hora_inicio) === null && validateTime(time) === null) {
+      const rangeError = validateTimeRange(formData.hora_inicio, time);
+      if (rangeError) {
+        setErrors(prev => ({ ...prev, hora_fin: rangeError }));
+      }
+    }
+  };
+
   // Cargar datos iniciales
   useEffect(() => {
     const loadData = async () => {
@@ -188,7 +194,6 @@ export default function CreateEventScreen() {
         // Cargar speakers
         const speakersRes = await fetch(`${BASE_URL}/data/speakers/all?format=json&t=${Date.now()}`);
         const speakersData = await speakersRes.json();
-        console.log('👥 Speakers response:', speakersData);
         
         if (speakersData?.data) {
           const speakers: SpeakerOption[] = speakersData.data.map((entry: any) => ({
@@ -202,7 +207,6 @@ export default function CreateEventScreen() {
         // Cargar tracks
         const tracksRes = await fetch(`${BASE_URL}/data/tracks/all?format=json&t=${Date.now()}`);
         const tracksData = await tracksRes.json();
-        console.log('🏷️ Tracks response:', tracksData);
         
         if (tracksData?.data) {
           const tracks: string[] = [];
@@ -226,6 +230,7 @@ export default function CreateEventScreen() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     
+    // Validaciones básicas
     if (!formData.titulo.trim()) newErrors.titulo = 'El título del evento es requerido';
     if (!formData.descripcion.trim()) newErrors.descripcion = 'La descripción es requerida';
     if (!formData.tema.trim()) newErrors.tema = 'La categoría es requerida';
@@ -242,7 +247,7 @@ export default function CreateEventScreen() {
       newErrors.lugar = 'La ubicación es requerida para eventos presenciales';
     }
     
-    // Validaciones mejoradas de fecha y hora
+    // ✅ VALIDACIONES MEJORADAS DE FECHA Y HORA
     const dateError = validateDate(formData.fecha);
     if (dateError) newErrors.fecha = dateError;
     
@@ -283,14 +288,12 @@ export default function CreateEventScreen() {
     console.log('📝 Starting event creation...');
     
     try {
-      // 1. Generar ID único para el evento
       const timestamp = Date.now();
       const randomId = Math.floor(Math.random() * 1000);
       const eventId = parseInt(`${timestamp.toString().slice(-8)}${randomId}`);
       
       console.log('🆔 Generated event ID:', eventId);
 
-      // 2. Preparar datos del evento según la estructura real de la BD
       const eventData = {
         id: eventId,
         titulo: formData.titulo.trim(),
@@ -311,7 +314,6 @@ export default function CreateEventScreen() {
 
       console.log('📤 Sending event data:', eventData);
 
-      // 3. Crear el evento en la base de datos
       const eventResponse = await fetch(`${BASE_URL}/data/store`, {
         method: 'POST',
         headers: {
@@ -335,11 +337,9 @@ export default function CreateEventScreen() {
       const eventResult = await eventResponse.json();
       console.log('✅ Event created successfully:', eventResult);
       
-      // 4. Usar el ID que generamos para las relaciones
       const finalEventId = eventResult.id || eventId;
       console.log('🆔 Final event ID for relationships:', finalEventId);
 
-      // 5. Crear relación event_tracks para la categoría seleccionada
       if (formData.tema && finalEventId) {
         console.log('🏷️ Creating track relationship for selected category...');
         
@@ -369,14 +369,12 @@ export default function CreateEventScreen() {
             }
           } catch (trackError) {
             console.warn('⚠️ Error creating track relationship:', trackError);
-            // No interrumpir el flujo principal por este error
           }
         } else {
           console.warn(`⚠️ Track ID not found for: ${formData.tema}`);
         }
       }
 
-      // 6. Mostrar mensaje de éxito
       const successMessage = `Evento "${formData.titulo}" creado exitosamente!`;
       console.log('🎉', successMessage);
       
@@ -386,7 +384,6 @@ export default function CreateEventScreen() {
         Alert.alert('Éxito', successMessage);
       }
       
-      // 7. Navegar de vuelta a la lista de eventos
       console.log('🔄 Redirecting to events list...');
       router.replace('/(tabs)/events');
       
@@ -415,7 +412,6 @@ export default function CreateEventScreen() {
     setInvitadosEspeciales(prev =>
       prev.includes(name) ? prev.filter(g => g !== name) : [...prev, name]
     );
-    // Si el invitado era el ponente principal, limpiarlo
     if (ponente === name) {
       setPonente('');
     }
@@ -423,7 +419,6 @@ export default function CreateEventScreen() {
 
   const handleSpeakerSelect = (name: string) => {
     setPonente(name);
-    // Si estaba en invitados, quitarlo
     if (invitadosEspeciales.includes(name)) {
       toggleGuest(name);
     }
@@ -606,10 +601,8 @@ export default function CreateEventScreen() {
 
         {/* Platform (only for Virtual events) */}
         {formData.modalidad === 'Virtual' && (
-          <TextField
-            label="Plataforma *"
+          <PlatformField
             value={formData.plataforma}
-            placeholder="ej: Zoom, Google Meet, Teams"
             onChange={(text) => setFormData(prev => ({ ...prev, plataforma: text }))}
             error={errors.plataforma}
           />
@@ -624,65 +617,31 @@ export default function CreateEventScreen() {
           />
         )}
         
-        {/* Date and Time with improved validation and formatting */}
-        <View style={styles.inputContainer}>
-          <Text style={[
-            styles.label,
-            { color: isDark ? '#FFFFFF' : '#000000' }
-          ]}>
-            Fecha del Evento *
-          </Text>
-          <TextField
-            value={formData.fecha}
-            placeholder="YYYY-MM-DD (ej: 2024-12-25)"
-            onChange={(text) => {
-              const formatted = formatDateInput(text);
-              setFormData(prev => ({ ...prev, fecha: formatted }));
-            }}
-            error={errors.fecha}
-            keyboardType="numeric"
-            label=''
-          />
-        </View>
+        {/* ✅ DATE AND TIME WITH ENHANCED VALIDATIONS */}
+        <DatePickerField
+          label="Fecha del Evento *"
+          value={formData.fecha}
+          onChange={(date) => setFormData(prev => ({ ...prev, fecha: date }))}
+          error={errors.fecha}
+          minimumDate={new Date()}
+        />
 
         <View style={styles.timeFieldsContainer}>
-          <View style={[styles.inputContainer, { flex: 1, marginRight: 8 }]}>
-            <Text style={[
-              styles.label,
-              { color: isDark ? '#FFFFFF' : '#000000' }
-            ]}>
-              Hora de Inicio *
-            </Text>
-            <TextField
+          <View style={{ flex: 1, marginRight: 8 }}>
+            <TimePickerField
+              label="Hora de Inicio *"
               value={formData.hora_inicio}
-              placeholder="HH:MM (ej: 14:30)"
-              onChange={(text) => {
-                const formatted = formatTimeInput(text);
-                setFormData(prev => ({ ...prev, hora_inicio: formatted }));
-              }}
+              onChange={handleStartTimeChange} // ✅ Validación en tiempo real
               error={errors.hora_inicio}
-              keyboardType="numeric"
-              label=''
             />
           </View>
           
-          <View style={[styles.inputContainer, { flex: 1, marginLeft: 8 }]}>
-            <Text style={[
-              styles.label,
-              { color: isDark ? '#FFFFFF' : '#000000' }
-            ]}>
-              Hora de Fin *
-            </Text>
-            <TextField
+          <View style={{ flex: 1, marginLeft: 8 }}>
+            <TimePickerField
+              label="Hora de Fin *"
               value={formData.hora_fin}
-              placeholder="HH:MM (ej: 16:00)"
-              onChange={(text) => {
-                const formatted = formatTimeInput(text);
-                setFormData(prev => ({ ...prev, hora_fin: formatted }));
-              }}
+              onChange={handleEndTimeChange} // ✅ Validación en tiempo real
               error={errors.hora_fin}
-              keyboardType="numeric"
-              label=''
             />
           </View>
         </View>
@@ -734,7 +693,6 @@ export default function CreateEventScreen() {
   );
 }
 
-// Agregar al StyleSheet existente:
 const styles = StyleSheet.create({
   container: {
     flex: 1,

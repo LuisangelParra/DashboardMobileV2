@@ -286,7 +286,7 @@ export default StyleSheet.create({
     alignItems: 'center',
   },
 
-  // Date/Time Picker buttons
+  // Date/Time Picker buttons (móvil)
   datePickerButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -318,6 +318,56 @@ export default StyleSheet.create({
   timePickerText: {
     fontSize: 16,
     flex: 1,
+  },
+  
+  // Web-specific styles
+  webDatePickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  webDateInput: {
+    flex: 1,
+    fontSize: 16,
+    marginLeft: 8,
+    height: 44,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+        border: 'none',
+      },
+    }),
+  },
+  webTimePickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  webTimeInput: {
+    flex: 1,
+    fontSize: 16,
+    marginLeft: 8,
+    height: 44,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+        border: 'none',
+      },
+    }),
+  },
+  dateDisplayText: {
+    fontSize: 12,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  timeDisplayText: {
+    fontSize: 12,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   
 });

@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, useColorScheme, Platform } from 'react-native';
+import { View, Text, Pressable, TextInput, useColorScheme, Platform } from 'react-native';
 import { Calendar } from 'lucide-react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import styles from './editEvent.styles';
+
+// Solo importar en móvil
+let DateTimePicker: any = null;
+if (Platform.OS !== 'web') {
+  DateTimePicker = require('@react-native-community/datetimepicker').default;
+}
 
 interface Props {
   label: string;
@@ -17,7 +22,7 @@ export function DatePickerField({
   value, 
   onChange, 
   error,
-  minimumDate = new Date() // Por defecto, fecha mínima es hoy
+  minimumDate = new Date()
 }: Props) {
   const isDark = useColorScheme() === 'dark';
   const [showPicker, setShowPicker] = useState(false);
@@ -48,7 +53,6 @@ export function DatePickerField({
     }
     
     if (selectedDate) {
-      // Convertir Date a string YYYY-MM-DD
       const year = selectedDate.getFullYear();
       const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
       const day = String(selectedDate.getDate()).padStart(2, '0');
@@ -57,25 +61,64 @@ export function DatePickerField({
     }
   };
 
-  const openPicker = () => {
-    if (Platform.OS === 'web') {
-      // Para web, usar input type="date" nativo
-      const input = document.createElement('input');
-      input.type = 'date';
-      input.min = minimumDate.toISOString().split('T')[0];
-      input.value = value;
-      input.onchange = (e) => {
-        const target = e.target as HTMLInputElement;
-        if (target.value) {
-          onChange(target.value);
-        }
-      };
-      input.click();
-    } else {
-      setShowPicker(true);
-    }
+  // ✅ CORREGIDO: Permitir edición libre en web
+  const handleWebDateChange = (text: string) => {
+    // Permitir cualquier cambio, sin validación estricta
+    onChange(text);
   };
 
+  const openMobilePicker = () => {
+    setShowPicker(true);
+  };
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.inputContainer}>
+        <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
+          {label}
+        </Text>
+        
+        <View
+          style={[
+            styles.webDatePickerContainer,
+            {
+              backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+              borderColor: error ? '#FF453A' : (isDark ? '#3C3C43' : '#C7C7CC'),
+              borderWidth: 1,
+            },
+          ]}
+        >
+          <Calendar size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
+          <TextInput
+            style={[
+              styles.webDateInput,
+              { 
+                color: isDark ? '#FFF' : '#000',
+                backgroundColor: 'transparent',
+              }
+            ]}
+            value={value}
+            onChangeText={handleWebDateChange} // ✅ Ahora permite edición libre
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+        </View>
+
+        {/* ✅ Solo mostrar formato válido si la fecha es correcta */}
+        {value && /^\d{4}-\d{2}-\d{2}$/.test(value) && (
+          <Text style={[styles.dateDisplayText, { color: isDark ? '#8E8E93' : '#6C6C70' }]}>
+            {formatDisplayDate(value)}
+          </Text>
+        )}
+
+        {error && <Text style={styles.errorText}>{error}</Text>}
+      </View>
+    );
+  }
+
+  // Versión móvil (sin cambios)
   return (
     <View style={styles.inputContainer}>
       <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
@@ -91,7 +134,7 @@ export function DatePickerField({
             borderWidth: 1,
           },
         ]}
-        onPress={openPicker}
+        onPress={openMobilePicker}
       >
         <Calendar size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
         <Text
@@ -107,14 +150,13 @@ export function DatePickerField({
         </Text>
       </Pressable>
 
-      {showPicker && Platform.OS !== 'web' && (
+      {showPicker && DateTimePicker && (
         <DateTimePicker
           value={dateValue}
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           minimumDate={minimumDate}
           onChange={handleDateChange}
-          onTouchCancel={() => setShowPicker(false)}
         />
       )}
 

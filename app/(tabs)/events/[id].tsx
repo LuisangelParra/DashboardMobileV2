@@ -19,6 +19,8 @@ import { TextField } from '@/components/events/edit/TextField';
 import { TextAreaField } from '@/components/events/edit/TextAreaField';
 import { LocationField } from '@/components/events/edit/LocationField';
 import { PlatformField } from '@/components/events/edit/PlatformField';
+import { DatePickerField } from '@/components/events/edit/DatePickerField';
+import { TimePickerField } from '@/components/events/edit/TimePickerField';
 import { SubmitDeleteButtons } from '@/components/events/edit/SubmitDeleteButtons';
 import { SpeakerPicker } from '@/components/events/edit/SpeakerPicker';
 import { MultiSpeakerPicker } from '@/components/events/edit/MultiSpeakerPicker';
@@ -90,6 +92,121 @@ export default function EditEventScreen() {
 
   const modalityOptions: ModalityType[] = ['Presencial', 'Virtual', 'Hibrida'];
 
+  // ✅ MISMAS VALIDACIONES QUE EN CREATE
+  const validateDate = (date: string): string | null => {
+    if (!date.trim()) return 'La fecha es requerida';
+    
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      return 'La fecha debe estar en formato YYYY-MM-DD (ej: 2024-12-25)';
+    }
+    
+    const [year, month, day] = date.split('-').map(Number);
+    
+    if (year < 2024 || year > 2030) {
+      return 'El año debe estar entre 2024 y 2030';
+    }
+    
+    if (month < 1 || month > 12) {
+      return 'El mes debe estar entre 01 y 12';
+    }
+    
+    if (day < 1 || day > 31) {
+      return 'El día debe estar entre 01 y 31';
+    }
+    
+    const parsedDate = new Date(year, month - 1, day);
+    if (parsedDate.getFullYear() !== year || 
+        parsedDate.getMonth() !== month - 1 || 
+        parsedDate.getDate() !== day) {
+      return 'Fecha inválida (día no existe en ese mes)';
+    }
+    
+    // Para edición, permitir fechas pasadas (eventos ya creados)
+    return null;
+  };
+
+  const validateTime = (time: string): string | null => {
+    if (!time.trim()) return 'La hora es requerida';
+    
+    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    if (!timeRegex.test(time)) {
+      return 'La hora debe estar en formato HH:MM (ej: 14:30)';
+    }
+    
+    const [hours, minutes] = time.split(':').map(Number);
+    
+    if (hours > 23) {
+      return 'Las horas deben estar entre 00 y 23';
+    }
+    
+    if (minutes > 59) {
+      return 'Los minutos deben estar entre 00 y 59';
+    }
+    
+    return null;
+  };
+
+  const validateTimeRange = (startTime: string, endTime: string): string | null => {
+    const startError = validateTime(startTime);
+    const endError = validateTime(endTime);
+    
+    if (startError || endError) return null;
+    
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const [endHour, endMin] = endTime.split(':').map(Number);
+    
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = endHour * 60 + endMin;
+    
+    if (endMinutes <= startMinutes) {
+      return 'La hora de fin debe ser posterior a la hora de inicio';
+    }
+    
+    if (endMinutes - startMinutes < 30) {
+      return 'El evento debe durar al menos 30 minutos';
+    }
+    
+    if (endMinutes - startMinutes > 720) {
+      return 'El evento no puede durar más de 12 horas';
+    }
+    
+    return null;
+  };
+
+  // ✅ VALIDACIÓN EN TIEMPO REAL PARA HORAS
+  const handleStartTimeChange = (time: string) => {
+    setFormData(prev => ({ ...prev, startTime: time }));
+    
+    if (errors.startTime) {
+      setErrors(prev => ({ ...prev, startTime: '' }));
+    }
+    
+    if (time && formData.endTime && validateTime(time) === null && validateTime(formData.endTime) === null) {
+      const rangeError = validateTimeRange(time, formData.endTime);
+      if (rangeError) {
+        setErrors(prev => ({ ...prev, endTime: rangeError }));
+      } else {
+        setErrors(prev => ({ ...prev, endTime: '' }));
+      }
+    }
+  };
+
+  const handleEndTimeChange = (time: string) => {
+    setFormData(prev => ({ ...prev, endTime: time }));
+    
+    if (errors.endTime) {
+      setErrors(prev => ({ ...prev, endTime: '' }));
+    }
+    
+    if (time && formData.startTime && validateTime(formData.startTime) === null && validateTime(time) === null) {
+      const rangeError = validateTimeRange(formData.startTime, time);
+      if (rangeError) {
+        setErrors(prev => ({ ...prev, endTime: rangeError }));
+      }
+    }
+  };
+
   // Cargar entry_id del evento
   useEffect(() => {
     if (!id) return;
@@ -141,7 +258,6 @@ export default function EditEventScreen() {
           .map(tid => names.find(n => map[n] === tid))
           .filter((n): n is string => !!n);
         setSelectedTracks(trackNames);
-        console.log('✅ Tracks seleccionados:', trackNames);
 
         // Cargar speakers
         const resS = await fetch(`${BASE_URL}/data/speakers/all?format=json`);
@@ -152,23 +268,27 @@ export default function EditEventScreen() {
         }));
         setSpeakerOptions(opts);
 
-        // Cargar ponente e invitados del evento
+        // Cargar datos específicos del evento
         const rowEvResponse = await fetch(`${BASE_URL}/data/events/all?format=json`);
         const { data: allRows } = (await rowEvResponse.json()) as { data: RawRow<RawEvent>[] };
         const rawEv = allRows.find(r => String(r.data.id) === id)?.data;
 
-        if (rawEv?.ponente) {
-          setMainSpeakerName(rawEv.ponente);
-          console.log('✅ Ponente principal:', rawEv.ponente);
-        }
-        if (rawEv?.invitados_especiales && Array.isArray(rawEv.invitados_especiales)) {
-          const validGuests = rawEv.invitados_especiales.filter(guest => guest != null && guest.trim() !== '');
-          setGuestNames(validGuests);
-          console.log('✅ Invitados especiales:', validGuests);
+        if (rawEv) {
+          setMainSpeakerName(rawEv.ponente || '');
+          if (rawEv.invitados_especiales && Array.isArray(rawEv.invitados_especiales)) {
+            setGuestNames(rawEv.invitados_especiales.filter(g => g != null && g.trim() !== ''));
+          }
+          
+          // ✅ CARGAR DATOS DE MODALIDAD
+          setFormData(prev => ({
+            ...prev,
+            modalidad: rawEv.modalidad || 'Presencial',
+            plataforma: rawEv.plataforma || '',
+            max_participantes: String(rawEv.max_participantes || ''),
+          }));
         }
       } catch (err) {
         console.error('❌ Error cargando datos:', err);
-        Alert.alert('Error', 'Error loading event data. Please try again.');
       }
     };
 
@@ -179,9 +299,6 @@ export default function EditEventScreen() {
   useEffect(() => {
     if (!event) return;
 
-    console.log('📊 Precargando formulario con evento:', event.name);
-
-    // Parseamos la fecha que viene en formato "Dec 15, 2024" a "YYYY-MM-DD"
     let formattedDate = '';
     try {
       if (event.date) {
@@ -194,31 +311,20 @@ export default function EditEventScreen() {
       console.warn('⚠️ Error parseando fecha:', event.date);
     }
 
-    // Parseamos el tiempo que viene como "09:00 - 11:00"
     const [startTime, endTime] = (event.time || '').split(' - ');
 
-    setFormData({
+    setFormData(prev => ({
+      ...prev,
       name: event.name || '',
       description: event.description || '',
       date: formattedDate,
       startTime: startTime?.trim() || '',
       endTime: endTime?.trim() || '',
       location: event.location || '',
-      modalidad: 'Presencial', // Valor por defecto
-      plataforma: '',
-      max_participantes: '',
       imageUrl: event.imageUrl || '',
-    });
-
-    console.log('✅ Formulario precargado:', {
-      name: event.name,
-      date: formattedDate,
-      startTime: startTime?.trim(),
-      endTime: endTime?.trim(),
-    });
+    }));
   }, [event]);
 
-  // Helpers
   const toggleTrack = (track: string) => {
     setSelectedTracks(prev =>
       prev.includes(track) ? prev.filter(t => t !== track) : [...prev, track]
@@ -227,7 +333,6 @@ export default function EditEventScreen() {
 
   const toggleGuest = (name: string) => {
     if (!name || !name.trim()) return;
-
     setGuestNames(prev =>
       prev.includes(name) ? prev.filter(g => g !== name) : [...prev, name]
     );
@@ -239,39 +344,12 @@ export default function EditEventScreen() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     
-    if (!formData.name?.trim()) {
-      newErrors.name = 'Event name is required';
-    }
-    if (!formData.description?.trim()) {
-      newErrors.description = 'Description is required';
-    }
-    if (!formData.date?.trim()) {
-      newErrors.date = 'Date is required';
-    } else {
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(formData.date)) {
-        newErrors.date = 'Date must be in YYYY-MM-DD format';
-      }
-    }
-    if (!formData.startTime?.trim()) {
-      newErrors.startTime = 'Start time is required';
-    } else {
-      const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-      if (!timeRegex.test(formData.startTime)) {
-        newErrors.startTime = 'Start time must be in HH:MM format';
-      }
-    }
-    if (!formData.endTime?.trim()) {
-      newErrors.endTime = 'End time is required';
-    } else {
-      const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-      if (!timeRegex.test(formData.endTime)) {
-        newErrors.endTime = 'End time must be in HH:MM format';
-      }
-    }
-    if (!formData.modalidad) {
-      newErrors.modalidad = 'Modality is required';
-    }
+    if (!formData.name?.trim()) newErrors.name = 'Event name is required';
+    if (!formData.description?.trim()) newErrors.description = 'Description is required';
+    if (!formData.modalidad) newErrors.modalidad = 'Modality is required';
+    if (!mainSpeakerName?.trim()) newErrors.mainSpeaker = 'Select main speaker';
+    if (!formData.imageUrl?.trim()) newErrors.imageUrl = 'Image URL is required';
+    if (selectedTracks.length === 0) newErrors.tracks = 'Select at least one track';
     
     // Validaciones específicas por modalidad
     if (formData.modalidad === 'Virtual' && !formData.plataforma.trim()) {
@@ -281,30 +359,26 @@ export default function EditEventScreen() {
       newErrors.location = 'Location is required for in-person events';
     }
     
-    if (!formData.imageUrl?.trim()) {
-      newErrors.imageUrl = 'Image URL is required';
-    }
-    if (selectedTracks.length === 0) {
-      newErrors.tracks = 'Select at least one track';
-    }
-    if (!mainSpeakerName?.trim()) {
-      newErrors.mainSpeaker = 'Select main speaker';
+    // ✅ VALIDACIONES MEJORADAS DE FECHA Y HORA
+    const dateError = validateDate(formData.date);
+    if (dateError) newErrors.date = dateError;
+    
+    const startTimeError = validateTime(formData.startTime);
+    if (startTimeError) newErrors.startTime = startTimeError;
+    
+    const endTimeError = validateTime(formData.endTime);
+    if (endTimeError) newErrors.endTime = endTimeError;
+    
+    if (!startTimeError && !endTimeError) {
+      const timeRangeError = validateTimeRange(formData.startTime, formData.endTime);
+      if (timeRangeError) newErrors.endTime = timeRangeError;
     }
     
     setErrors(newErrors);
-    
-    if (Object.keys(newErrors).length > 0) {
-      console.log('❌ Errores de validación:', newErrors);
-      return false;
-    }
-    
-    console.log('✅ Validación exitosa');
-    return true;
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async () => {
-    console.log('📤 Iniciando envío del formulario...');
-    
     if (!validateForm() || !entryId) {
       if (!entryId) {
         Alert.alert('Error', 'Event entry ID not found. Please try again.');
@@ -315,7 +389,6 @@ export default function EditEventScreen() {
     setIsSubmitting(true);
     
     try {
-      // 1. Obtener datos originales del evento
       const resAll = await fetch(`${BASE_URL}/data/events/all?format=json`);
       const { data } = (await resAll.json()) as { data: RawRow<RawEvent>[] };
       const row = data.find(r => r.entry_id === entryId);
@@ -323,7 +396,6 @@ export default function EditEventScreen() {
         throw new Error('Original event not found');
       }
 
-      // 2. Actualizar evento en la base de datos
       const payload = {
         data: {
           ...row.data,
@@ -342,8 +414,6 @@ export default function EditEventScreen() {
         },
       };
 
-      console.log('📤 Enviando payload:', payload);
-
       const putRes = await fetch(`${BASE_URL}/data/events/update/${entryId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -352,23 +422,18 @@ export default function EditEventScreen() {
 
       if (!putRes.ok) {
         const errorText = await putRes.text();
-        console.error('❌ Error en PUT:', errorText);
         throw new Error(`Failed to update event: ${putRes.status}`);
       }
 
-      console.log('✅ Evento actualizado exitosamente');
-
-      // 3. Sincronizar tracks del evento
+      // Sincronizar tracks
       const relRes = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`);
       const { data: relRows } = (await relRes.json()) as { data: RawRow<RawEventTrack>[] };
       const oldRows = relRows.filter(r => String(r.data.event_id) === id);
       
-      // Eliminar tracks anteriores
       for (const r of oldRows) {
         await fetch(`${BASE_URL}/data/event_tracks/delete/${r.entry_id}`, { method: 'DELETE' });
       }
       
-      // Agregar nuevos tracks
       for (const trkName of selectedTracks) {
         const trkId = trackNameToId[trkName];
         if (!trkId) continue;
@@ -381,8 +446,6 @@ export default function EditEventScreen() {
           }),
         });
       }
-
-      console.log('✅ Tracks sincronizados exitosamente');
 
       if (Platform.OS === 'web') {
         alert('Event updated successfully!');
@@ -430,27 +493,23 @@ export default function EditEventScreen() {
     setIsDeleting(true);
     
     try {
-      // Borrar relaciones event_tracks
       const rel = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`);
       const { data: rT } = (await rel.json()) as { data: RawRow<RawEventTrack>[] };
       for (const r of rT.filter(r => String(r.data.event_id) === id)) {
         await fetch(`${BASE_URL}/data/event_tracks/delete/${r.entry_id}`, { method: 'DELETE' });
       }
       
-      // Borrar evento
       const del = await fetch(`${BASE_URL}/data/events/delete/${entryId}`, { method: 'DELETE' });
       if (!del.ok) throw new Error('Delete failed');
 
       router.back();
     } catch (err) {
-      console.error('❌ Error eliminando evento:', err);
       Alert.alert('Error', 'Failed to delete event.');
     } finally {
       setIsDeleting(false);
     }
   };
 
-  // Renderizado de estados de carga y error
   if (loadingEvent) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
@@ -479,13 +538,11 @@ export default function EditEventScreen() {
     <ScrollView style={[styles.container, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
       <View style={[styles.formContainer, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}>
         
-        {/* Campo de imagen */}
         <ImagePickerField
           imageUrl={formData.imageUrl}
           onImageChange={uri => setFormData(p => ({ ...p, imageUrl: uri }))}
         />
 
-        {/* Nombre del evento */}
         <TextField
           label="Event Name *"
           value={formData.name}
@@ -494,7 +551,6 @@ export default function EditEventScreen() {
           error={errors.name}
         />
 
-        {/* Descripción */}
         <TextAreaField
           label="Description *"
           value={formData.description}
@@ -503,7 +559,6 @@ export default function EditEventScreen() {
           error={errors.description}
         />
 
-        {/* Tracks */}
         <View style={styles.inputContainer}>
           <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
             Tracks *
@@ -541,7 +596,6 @@ export default function EditEventScreen() {
           {errors.tracks && <Text style={styles.errorText}>{errors.tracks}</Text>}
         </View>
 
-        {/* Ponente principal */}
         <SpeakerPicker
           label="Main Speaker *"
           options={speakerOptions}
@@ -555,7 +609,6 @@ export default function EditEventScreen() {
           error={errors.mainSpeaker}
         />
 
-        {/* Invitados especiales */}
         <MultiSpeakerPicker
           label="Special Guests"
           options={speakerOptions.filter(s => s.name !== mainSpeakerName)}
@@ -563,7 +616,7 @@ export default function EditEventScreen() {
           onSelect={toggleGuest}
         />
 
-        {/* Modalidad */}
+        {/* ✅ MODALIDAD CON VALIDACIONES */}
         <View style={styles.inputContainer}>
           <Text style={[styles.label, { color: isDark ? '#FFFFFF' : '#000000' }]}>
             Modalidad *
@@ -598,7 +651,6 @@ export default function EditEventScreen() {
           {errors.modalidad && <Text style={styles.errorText}>{errors.modalidad}</Text>}
         </View>
 
-        {/* Platform (only for Virtual events) */}
         {formData.modalidad === 'Virtual' && (
           <PlatformField
             value={formData.plataforma}
@@ -607,7 +659,6 @@ export default function EditEventScreen() {
           />
         )}
 
-        {/* Location (for Presencial and Hibrida) */}
         {(formData.modalidad === 'Presencial' || formData.modalidad === 'Hibrida') && (
           <LocationField
             value={formData.location}
@@ -616,48 +667,33 @@ export default function EditEventScreen() {
           />
         )}
 
-        {/* Fecha y hora */}
-        <View style={styles.inputContainer}>
-          <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
-            Date *
-          </Text>
-          <TextField
-            value={formData.date}
-            placeholder="YYYY-MM-DD"
-            onChange={d => setFormData(p => ({ ...p, date: d }))}
-            error={errors.date}
-            label=''
-          />
-        </View>
+        {/* ✅ DATE AND TIME WITH ENHANCED VALIDATIONS */}
+        <DatePickerField
+          label="Fecha del Evento *"
+          value={formData.date}
+          onChange={d => setFormData(p => ({ ...p, date: d }))}
+          error={errors.date}
+        />
 
         <View style={styles.timeFieldsContainer || { flexDirection: 'row', gap: 16 }}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
-              Start Time *
-            </Text>
-            <TextField
+            <TimePickerField
+              label="Hora de Inicio *"
               value={formData.startTime}
-              placeholder="HH:MM"
-              onChange={t => setFormData(p => ({ ...p, startTime: t }))}
+              onChange={handleStartTimeChange} // ✅ Validación en tiempo real
               error={errors.startTime}
-              label=''
             />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
-              End Time *
-            </Text>
-            <TextField
+            <TimePickerField
+              label="Hora de Fin *"
               value={formData.endTime}
-              placeholder="HH:MM"
-              onChange={t => setFormData(p => ({ ...p, endTime: t }))}
+              onChange={handleEndTimeChange} // ✅ Validación en tiempo real
               error={errors.endTime}
-              label=''
             />
           </View>
         </View>
 
-        {/* Max Participants */}
         <TextField
           label="Max Participants"
           value={formData.max_participantes}
@@ -666,10 +702,8 @@ export default function EditEventScreen() {
           keyboardType="numeric"
         />
 
-        {/* Error general */}
         {errors.submit && <Text style={[styles.errorText, styles.submitError]}>{errors.submit}</Text>}
 
-        {/* Botones */}
         <SubmitDeleteButtons
           isSubmitting={isSubmitting}
           isDeleting={isDeleting}

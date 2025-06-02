@@ -739,53 +739,30 @@ export default function EditEventScreen() {
           />
         )}
 
-        {/* Date and Time with improved validation and formatting */}
-        <View style={styles.inputContainer}>
-          <Text style={[styles.label, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-            Fecha del Evento *
-          </Text>
-          <TextField
-            value={formData.fecha}
-            placeholder="YYYY-MM-DD (ej: 2024-12-25)"
-            onChange={(text) => {
-              const formatted = formatDateInput(text);
-              setFormData(prev => ({ ...prev, fecha: formatted }));
-            }}
-            error={errors.fecha}
-            keyboardType="numeric"
-          />
-        </View>
+        {/* Date and Time with improved UX */}
+        <DatePickerField
+          label="Fecha del Evento *"
+          value={formData.date}
+          onChange={(date) => setFormData(p => ({ ...p, date }))}
+          error={errors.date}
+          minimumDate={new Date()} // No permitir fechas pasadas
+        />
 
-        <View style={styles.timeFieldsContainer}>
-          <View style={[styles.inputContainer, { flex: 1, marginRight: 8 }]}>
-            <Text style={[styles.label, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-              Hora de Inicio *
-            </Text>
-            <TextField
-              value={formData.hora_inicio}
-              placeholder="HH:MM (ej: 14:30)"
-              onChange={(text) => {
-                const formatted = formatTimeInput(text);
-                setFormData(prev => ({ ...prev, hora_inicio: formatted }));
-              }}
-              error={errors.hora_inicio}
-              keyboardType="numeric"
+        <View style={styles.timeFieldsContainer || { flexDirection: 'row', gap: 16 }}>
+          <View style={{ flex: 1 }}>
+            <TimePickerField
+              label="Hora de Inicio *"
+              value={formData.startTime}
+              onChange={(time) => setFormData(p => ({ ...p, startTime: time }))}
+              error={errors.startTime}
             />
           </View>
-          
-          <View style={[styles.inputContainer, { flex: 1, marginLeft: 8 }]}>
-            <Text style={[styles.label, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-              Hora de Fin *
-            </Text>
-            <TextField
-              value={formData.hora_fin}
-              placeholder="HH:MM (ej: 16:00)"
-              onChange={(text) => {
-                const formatted = formatTimeInput(text);
-                setFormData(prev => ({ ...prev, hora_fin: formatted }));
-              }}
-              error={errors.hora_fin}
-              keyboardType="numeric"
+          <View style={{ flex: 1 }}>
+            <TimePickerField
+              label="Hora de Fin *"
+              value={formData.endTime}
+              onChange={(time) => setFormData(p => ({ ...p, endTime: time }))}
+              error={errors.endTime}
             />
           </View>
         </View>

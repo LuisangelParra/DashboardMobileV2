@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, useColorScheme, Platform } from 'react-native';
+import { View, Text, Pressable, TextInput, useColorScheme, Platform } from 'react-native';
 import { Clock } from 'lucide-react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import styles from './editEvent.styles';
+
+// Solo importar en móvil
+let DateTimePicker: any = null;
+if (Platform.OS !== 'web') {
+  DateTimePicker = require('@react-native-community/datetimepicker').default;
+}
 
 interface Props {
   label: string;
@@ -31,6 +36,8 @@ export function TimePickerField({ label, value, onChange, error }: Props) {
     
     try {
       const [hours, minutes] = timeStr.split(':');
+      if (!hours || !minutes) return timeStr; // Mostrar tal como está si no es formato completo
+      
       const time = new Date();
       time.setHours(parseInt(hours), parseInt(minutes), 0, 0);
       
@@ -40,7 +47,7 @@ export function TimePickerField({ label, value, onChange, error }: Props) {
         hour12: false
       });
     } catch {
-      return 'Hora inválida';
+      return timeStr; // Mostrar tal como está si hay error
     }
   };
 
@@ -50,7 +57,6 @@ export function TimePickerField({ label, value, onChange, error }: Props) {
     }
     
     if (selectedTime) {
-      // Convertir Date a string HH:MM
       const hours = String(selectedTime.getHours()).padStart(2, '0');
       const minutes = String(selectedTime.getMinutes()).padStart(2, '0');
       const timeString = `${hours}:${minutes}`;
@@ -58,24 +64,64 @@ export function TimePickerField({ label, value, onChange, error }: Props) {
     }
   };
 
-  const openPicker = () => {
-    if (Platform.OS === 'web') {
-      // Para web, usar input type="time" nativo
-      const input = document.createElement('input');
-      input.type = 'time';
-      input.value = value;
-      input.onchange = (e) => {
-        const target = e.target as HTMLInputElement;
-        if (target.value) {
-          onChange(target.value);
-        }
-      };
-      input.click();
-    } else {
-      setShowPicker(true);
-    }
+  // ✅ CORREGIDO: Permitir edición libre en web
+  const handleWebTimeChange = (text: string) => {
+    // Permitir cualquier cambio, sin validación estricta
+    onChange(text);
   };
 
+  const openMobilePicker = () => {
+    setShowPicker(true);
+  };
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.inputContainer}>
+        <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
+          {label}
+        </Text>
+        
+        <View
+          style={[
+            styles.webTimePickerContainer,
+            {
+              backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+              borderColor: error ? '#FF453A' : (isDark ? '#3C3C43' : '#C7C7CC'),
+              borderWidth: 1,
+            },
+          ]}
+        >
+          <Clock size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
+          <TextInput
+            style={[
+              styles.webTimeInput,
+              { 
+                color: isDark ? '#FFF' : '#000',
+                backgroundColor: 'transparent',
+              }
+            ]}
+            value={value}
+            onChangeText={handleWebTimeChange} // ✅ Ahora permite edición libre
+            placeholder="HH:MM"
+            placeholderTextColor={isDark ? '#8E8E93' : '#3C3C43'}
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+        </View>
+
+        {/* ✅ Solo mostrar formato válido si la hora es correcta */}
+        {value && /^\d{1,2}:\d{2}$/.test(value) && (
+          <Text style={[styles.timeDisplayText, { color: isDark ? '#8E8E93' : '#6C6C70' }]}>
+            {formatDisplayTime(value)}
+          </Text>
+        )}
+
+        {error && <Text style={styles.errorText}>{error}</Text>}
+      </View>
+    );
+  }
+
+  // Versión móvil (sin cambios)
   return (
     <View style={styles.inputContainer}>
       <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
@@ -91,7 +137,7 @@ export function TimePickerField({ label, value, onChange, error }: Props) {
             borderWidth: 1,
           },
         ]}
-        onPress={openPicker}
+        onPress={openMobilePicker}
       >
         <Clock size={20} color={isDark ? '#8E8E93' : '#3C3C43'} />
         <Text
@@ -107,13 +153,12 @@ export function TimePickerField({ label, value, onChange, error }: Props) {
         </Text>
       </Pressable>
 
-      {showPicker && Platform.OS !== 'web' && (
+      {showPicker && DateTimePicker && (
         <DateTimePicker
           value={timeValue}
           mode="time"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={handleTimeChange}
-          onTouchCancel={() => setShowPicker(false)}
         />
       )}
 
