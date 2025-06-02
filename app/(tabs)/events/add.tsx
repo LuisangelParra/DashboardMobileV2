@@ -45,7 +45,6 @@ export default function CreateEventScreen() {
   
   const [ponente, setPonente] = useState<string>('');
   const [invitadosEspeciales, setInvitadosEspeciales] = useState<string[]>([]);
-  const [selectedTracks, setSelectedTracks] = useState<string[]>([]);
   
   // Estados para opciones
   const [speakerOptions, setSpeakerOptions] = useState<SpeakerOption[]>([]);
@@ -55,11 +54,129 @@ export default function CreateEventScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const categories: EventCategory[] = [
-    'Workshop', 'Presentation', 'Panel', 'Networking', 'Other'
-  ];
-  
   const modalityOptions: ModalityType[] = ['Presencial', 'Virtual', 'Hibrida'];
+
+  // Función helper para formatear fecha automáticamente
+  const formatDateInput = (input: string): string => {
+    const numbers = input.replace(/\D/g, '');
+    
+    if (numbers.length >= 8) {
+      const year = numbers.slice(0, 4);
+      const month = numbers.slice(4, 6);
+      const day = numbers.slice(6, 8);
+      return `${year}-${month}-${day}`;
+    } else if (numbers.length >= 6) {
+      const year = numbers.slice(0, 4);
+      const month = numbers.slice(4, 6);
+      const day = numbers.slice(6);
+      return `${year}-${month}-${day}`;
+    } else if (numbers.length >= 4) {
+      const year = numbers.slice(0, 4);
+      const month = numbers.slice(4);
+      return `${year}-${month}`;
+    }
+    return numbers;
+  };
+
+  // Función helper para formatear hora automáticamente
+  const formatTimeInput = (input: string): string => {
+    const numbers = input.replace(/\D/g, '');
+    
+    if (numbers.length >= 4) {
+      const hours = numbers.slice(0, 2);
+      const minutes = numbers.slice(2, 4);
+      return `${hours}:${minutes}`;
+    } else if (numbers.length >= 2) {
+      const hours = numbers.slice(0, 2);
+      const minutes = numbers.slice(2);
+      return `${hours}:${minutes}`;
+    }
+    return numbers;
+  };
+
+  // Validación mejorada de fecha
+  const validateDate = (date: string): string | null => {
+    if (!date.trim()) return 'La fecha es requerida';
+    
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      return 'La fecha debe estar en formato YYYY-MM-DD (ej: 2024-12-25)';
+    }
+    
+    const [year, month, day] = date.split('-').map(Number);
+    
+    if (month < 1 || month > 12) {
+      return 'El mes debe estar entre 01 y 12';
+    }
+    
+    if (day < 1 || day > 31) {
+      return 'El día debe estar entre 01 y 31';
+    }
+    
+    const parsedDate = new Date(year, month - 1, day);
+    if (parsedDate.getFullYear() !== year || 
+        parsedDate.getMonth() !== month - 1 || 
+        parsedDate.getDate() !== day) {
+      return 'Fecha inválida';
+    }
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    parsedDate.setHours(0, 0, 0, 0);
+    
+    if (parsedDate < today) {
+      return 'La fecha no puede ser anterior al día de hoy';
+    }
+    
+    return null;
+  };
+
+  // Validación mejorada de hora
+  const validateTime = (time: string): string | null => {
+    if (!time.trim()) return 'La hora es requerida';
+    
+    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    if (!timeRegex.test(time)) {
+      return 'La hora debe estar en formato HH:MM (ej: 14:30)';
+    }
+    
+    const [hours, minutes] = time.split(':').map(Number);
+    
+    if (hours > 23) {
+      return 'Las horas deben estar entre 00 y 23';
+    }
+    
+    if (minutes > 59) {
+      return 'Los minutos deben estar entre 00 y 59';
+    }
+    
+    return null;
+  };
+
+  // Validación de rango de tiempo
+  const validateTimeRange = (startTime: string, endTime: string): string | null => {
+    if (!startTime || !endTime) return null;
+    
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const [endHour, endMin] = endTime.split(':').map(Number);
+    
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = endHour * 60 + endMin;
+    
+    if (endMinutes <= startMinutes) {
+      return 'La hora de fin debe ser posterior a la hora de inicio';
+    }
+    
+    if (endMinutes - startMinutes < 30) {
+      return 'El evento debe durar al menos 30 minutos';
+    }
+    
+    if (endMinutes - startMinutes > 720) {
+      return 'El evento no puede durar más de 12 horas';
+    }
+    
+    return null;
+  };
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -108,48 +225,45 @@ export default function CreateEventScreen() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     
-    console.log('🔍 Validating form data:', {
-      titulo: formData.titulo,
-      descripcion: formData.descripcion,
-      tema: formData.tema,
-      fecha: formData.fecha,
-      hora_inicio: formData.hora_inicio,
-      hora_fin: formData.hora_fin,
-      modalidad: formData.modalidad,
-      ponente: ponente,
-      max_participantes: formData.max_participantes,
-      imageUrl: formData.imageUrl,
-      lugar: formData.lugar,
-      plataforma: formData.plataforma
-    });
-    
-    if (!formData.titulo.trim()) newErrors.titulo = 'Event title is required';
-    if (!formData.descripcion.trim()) newErrors.descripcion = 'Description is required';
-    if (!formData.tema.trim()) newErrors.tema = 'Category is required';
-    if (!formData.fecha.trim()) newErrors.fecha = 'Date is required';
-    if (!formData.hora_inicio.trim()) newErrors.hora_inicio = 'Start time is required';
-    if (!formData.hora_fin.trim()) newErrors.hora_fin = 'End time is required';
-    if (!formData.modalidad) newErrors.modalidad = 'Modality is required';
-    if (!ponente.trim()) newErrors.ponente = 'Main speaker is required';
-    if (!formData.max_participantes.trim()) newErrors.max_participantes = 'Max participants is required';
-    if (!formData.imageUrl.trim()) newErrors.imageUrl = 'Image is required';
+    if (!formData.titulo.trim()) newErrors.titulo = 'El título del evento es requerido';
+    if (!formData.descripcion.trim()) newErrors.descripcion = 'La descripción es requerida';
+    if (!formData.tema.trim()) newErrors.tema = 'La categoría es requerida';
+    if (!formData.modalidad) newErrors.modalidad = 'La modalidad es requerida';
+    if (!ponente.trim()) newErrors.ponente = 'El ponente principal es requerido';
+    if (!formData.max_participantes.trim()) newErrors.max_participantes = 'El máximo de participantes es requerido';
+    if (!formData.imageUrl.trim()) newErrors.imageUrl = 'La imagen es requerida';
     
     // Validaciones específicas por modalidad
     if (formData.modalidad === 'Virtual' && !formData.plataforma.trim()) {
-      newErrors.plataforma = 'Platform is required for virtual events';
+      newErrors.plataforma = 'La plataforma es requerida para eventos virtuales';
     }
     if ((formData.modalidad === 'Presencial' || formData.modalidad === 'Hibrida') && !formData.lugar.trim()) {
-      newErrors.lugar = 'Location is required for in-person events';
+      newErrors.lugar = 'La ubicación es requerida para eventos presenciales';
+    }
+    
+    // Validaciones mejoradas de fecha y hora
+    const dateError = validateDate(formData.fecha);
+    if (dateError) newErrors.fecha = dateError;
+    
+    const startTimeError = validateTime(formData.hora_inicio);
+    if (startTimeError) newErrors.hora_inicio = startTimeError;
+    
+    const endTimeError = validateTime(formData.hora_fin);
+    if (endTimeError) newErrors.hora_fin = endTimeError;
+    
+    // Validar rango de tiempo solo si ambas horas son válidas
+    if (!startTimeError && !endTimeError) {
+      const timeRangeError = validateTimeRange(formData.hora_inicio, formData.hora_fin);
+      if (timeRangeError) newErrors.hora_fin = timeRangeError;
     }
     
     // Validar número de participantes
     const maxParticipants = parseInt(formData.max_participantes);
     if (isNaN(maxParticipants) || maxParticipants <= 0) {
-      newErrors.max_participantes = 'Max participants must be a positive number';
+      newErrors.max_participantes = 'El máximo de participantes debe ser un número positivo';
+    } else if (maxParticipants > 10000) {
+      newErrors.max_participantes = 'El máximo de participantes no puede exceder 10,000';
     }
-    
-    console.log('📋 Validation errors found:', newErrors);
-    console.log('✅ Validation passed:', Object.keys(newErrors).length === 0);
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -224,15 +338,15 @@ export default function CreateEventScreen() {
       const finalEventId = eventResult.id || eventId;
       console.log('🆔 Final event ID for relationships:', finalEventId);
 
-      // 5. Crear relaciones event_tracks si hay tracks seleccionados
-      if (selectedTracks.length > 0 && finalEventId) {
-        console.log('🏷️ Creating track relationships...');
+      // 5. Crear relación event_tracks para la categoría seleccionada
+      if (formData.tema && finalEventId) {
+        console.log('🏷️ Creating track relationship for selected category...');
         
-        for (const trackName of selectedTracks) {
-          const trackId = trackNameToId[trackName];
-          if (trackId) {
-            console.log(`📌 Creating track relation: event ${finalEventId} -> track ${trackId} (${trackName})`);
-            
+        const trackId = trackNameToId[formData.tema];
+        if (trackId) {
+          console.log(`📌 Creating track relation: event ${finalEventId} -> track ${trackId} (${formData.tema})`);
+          
+          try {
             const trackResponse = await fetch(`${BASE_URL}/data/store`, {
               method: 'POST',
               headers: {
@@ -248,25 +362,30 @@ export default function CreateEventScreen() {
             });
 
             if (!trackResponse.ok) {
-              console.warn(`⚠️ Failed to create track relationship for ${trackName}`);
+              console.warn(`⚠️ Failed to create track relationship for ${formData.tema}`);
             } else {
-              console.log(`✅ Track relationship created for ${trackName}`);
+              console.log(`✅ Track relationship created for ${formData.tema}`);
             }
+          } catch (trackError) {
+            console.warn('⚠️ Error creating track relationship:', trackError);
+            // No interrumpir el flujo principal por este error
           }
+        } else {
+          console.warn(`⚠️ Track ID not found for: ${formData.tema}`);
         }
       }
 
       // 6. Mostrar mensaje de éxito
-      const successMessage = `Event "${formData.titulo}" created successfully with ID: ${finalEventId}!`;
+      const successMessage = `Evento "${formData.titulo}" creado exitosamente!`;
       console.log('🎉', successMessage);
       
       if (Platform.OS === 'web') {
         window.alert(successMessage);
       } else {
-        Alert.alert('Success', successMessage);
+        Alert.alert('Éxito', successMessage);
       }
       
-      // 4. Navegar de vuelta a la lista de eventos (esto forzará la recarga)
+      // 7. Navegar de vuelta a la lista de eventos
       console.log('🔄 Redirecting to events list...');
       router.replace('/(tabs)/events');
       
@@ -274,13 +393,13 @@ export default function CreateEventScreen() {
       console.error('❌ Error creating event:', error);
       
       const errorMessage = error instanceof Error 
-        ? error.message 
-        : 'Failed to create event. Please try again.';
+        ? `Error: ${error.message}` 
+        : 'Error al crear el evento. Por favor intenta de nuevo.';
       
       setErrors({ submit: errorMessage });
       
       if (Platform.OS === 'web') {
-        window.alert(`Error: ${errorMessage}`);
+        window.alert(errorMessage);
       } else {
         Alert.alert('Error', errorMessage);
       }
@@ -288,12 +407,6 @@ export default function CreateEventScreen() {
       setIsSubmitting(false);
       console.log('🔚 Event creation process finished');
     }
-  };
-
-  const toggleTrack = (track: string) => {
-    setSelectedTracks(prev =>
-      prev.includes(track) ? prev.filter(t => t !== track) : [...prev, track]
-    );
   };
 
   const toggleGuest = (name: string) => {
@@ -360,80 +473,84 @@ export default function CreateEventScreen() {
               styles.imageUploadText,
               { color: isDark ? '#FFFFFF' : '#000000' }
             ]}>
-              Add Event Image
+              Agregar Imagen del Evento
             </Text>
           </Pressable>
         )}
         
         {/* Event Title */}
         <TextField
-          label="Event Title *"
+          label="Título del Evento *"
           value={formData.titulo}
-          placeholder="Enter event title"
+          placeholder="Ingresa el título del evento"
           onChange={(text) => setFormData(prev => ({ ...prev, titulo: text }))}
           error={errors.titulo}
         />
         
         {/* Description */}
         <TextAreaField
-          label="Description *"
+          label="Descripción *"
           value={formData.descripcion}
-          placeholder="Enter event description"
+          placeholder="Ingresa la descripción del evento"
           onChange={(text) => setFormData(prev => ({ ...prev, descripcion: text }))}
           error={errors.descripcion}
         />
         
-        {/* Category */}
+        {/* Category - Using tracks from database */}
         <View style={styles.inputContainer}>
           <Text style={[
             styles.label,
             { color: isDark ? '#FFFFFF' : '#000000' }
           ]}>
-            Category *
+            Categoría *
           </Text>
-          <View style={styles.categoryContainer}>
-            {categories.map(category => (
-              <Pressable
-                key={category}
-                style={[
-                  styles.categoryChip,
-                  { 
-                    backgroundColor: formData.tema === category 
-                      ? '#0A84FF' 
-                      : isDark ? '#2C2C2E' : '#F2F2F7'
-                  }
-                ]}
-                onPress={() => setFormData(prev => ({ ...prev, tema: category }))}
-              >
-                <Text style={[
-                  styles.categoryChipText,
-                  { 
-                    color: formData.tema === category 
-                      ? '#FFFFFF' 
-                      : isDark ? '#FFFFFF' : '#000000'
-                  }
-                ]}>
-                  {category}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          {allTracks.length === 0 ? (
+            <View style={[
+              styles.categoryContainer,
+              { justifyContent: 'center', alignItems: 'center', padding: 20 }
+            ]}>
+              <ActivityIndicator size="small" color={isDark ? '#FFFFFF' : '#000000'} />
+              <Text style={[
+                { color: isDark ? '#FFFFFF' : '#000000', marginTop: 8 }
+              ]}>
+                Cargando categorías...
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.categoryContainer}>
+              {allTracks.map(track => (
+                <Pressable
+                  key={track}
+                  style={[
+                    styles.categoryChip,
+                    { 
+                      backgroundColor: formData.tema === track 
+                        ? '#0A84FF' 
+                        : isDark ? '#2C2C2E' : '#F2F2F7'
+                    }
+                  ]}
+                  onPress={() => setFormData(prev => ({ ...prev, tema: track }))}
+                >
+                  <Text style={[
+                    styles.categoryChipText,
+                    { 
+                      color: formData.tema === track 
+                        ? '#FFFFFF' 
+                        : isDark ? '#FFFFFF' : '#000000'
+                    }
+                  ]}>
+                    {track}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
           {errors.tema && <Text style={styles.errorText}>{errors.tema}</Text>}
         </View>
 
-        {/* Tracks */}
-        {allTracks.length > 0 && (
-          <CategorySelector
-            label="Tracks"
-            options={allTracks}
-            selected={selectedTracks}
-            onSelect={toggleTrack}
-          />
-        )}
-
         {/* Main Speaker */}
         <SpeakerPicker
-          label="Main Speaker *"
+          label="Ponente Principal *"
           options={speakerOptions}
           selected={ponente}
           onSelect={handleSpeakerSelect}
@@ -442,7 +559,7 @@ export default function CreateEventScreen() {
 
         {/* Special Guests */}
         <MultiSpeakerPicker
-          label="Special Guests"
+          label="Invitados Especiales"
           options={speakerOptions.filter(s => s.name !== ponente)}
           selected={invitadosEspeciales}
           onSelect={toggleGuest}
@@ -454,7 +571,7 @@ export default function CreateEventScreen() {
             styles.label,
             { color: isDark ? '#FFFFFF' : '#000000' }
           ]}>
-            Modality *
+            Modalidad *
           </Text>
           <View style={styles.categoryContainer}>
             {modalityOptions.map(modality => (
@@ -489,9 +606,9 @@ export default function CreateEventScreen() {
         {/* Platform (only for Virtual events) */}
         {formData.modalidad === 'Virtual' && (
           <TextField
-            label="Platform *"
+            label="Plataforma *"
             value={formData.plataforma}
-            placeholder="e.g., Zoom, Google Meet, Teams"
+            placeholder="ej: Zoom, Google Meet, Teams"
             onChange={(text) => setFormData(prev => ({ ...prev, plataforma: text }))}
             error={errors.plataforma}
           />
@@ -506,26 +623,74 @@ export default function CreateEventScreen() {
           />
         )}
         
-        {/* Date and Time */}
-        <DateTimeFields
-          date={formData.fecha}
-          startTime={formData.hora_inicio}
-          endTime={formData.hora_fin}
-          onDateChange={(date) => setFormData(prev => ({ ...prev, fecha: date }))}
-          onStartTimeChange={(time) => setFormData(prev => ({ ...prev, hora_inicio: time }))}
-          onEndTimeChange={(time) => setFormData(prev => ({ ...prev, hora_fin: time }))}
-          errors={{
-            date: errors.fecha,
-            startTime: errors.hora_inicio,
-            endTime: errors.hora_fin
-          }}
-        />
+        {/* Date and Time with improved validation and formatting */}
+        <View style={styles.inputContainer}>
+          <Text style={[
+            styles.label,
+            { color: isDark ? '#FFFFFF' : '#000000' }
+          ]}>
+            Fecha del Evento *
+          </Text>
+          <TextField
+            value={formData.fecha}
+            placeholder="YYYY-MM-DD (ej: 2024-12-25)"
+            onChange={(text) => {
+              const formatted = formatDateInput(text);
+              setFormData(prev => ({ ...prev, fecha: formatted }));
+            }}
+            error={errors.fecha}
+            keyboardType="numeric"
+            maxLength={10}
+          />
+        </View>
+
+        <View style={styles.timeFieldsContainer}>
+          <View style={[styles.inputContainer, { flex: 1, marginRight: 8 }]}>
+            <Text style={[
+              styles.label,
+              { color: isDark ? '#FFFFFF' : '#000000' }
+            ]}>
+              Hora de Inicio *
+            </Text>
+            <TextField
+              value={formData.hora_inicio}
+              placeholder="HH:MM (ej: 14:30)"
+              onChange={(text) => {
+                const formatted = formatTimeInput(text);
+                setFormData(prev => ({ ...prev, hora_inicio: formatted }));
+              }}
+              error={errors.hora_inicio}
+              keyboardType="numeric"
+              maxLength={5}
+            />
+          </View>
+          
+          <View style={[styles.inputContainer, { flex: 1, marginLeft: 8 }]}>
+            <Text style={[
+              styles.label,
+              { color: isDark ? '#FFFFFF' : '#000000' }
+            ]}>
+              Hora de Fin *
+            </Text>
+            <TextField
+              value={formData.hora_fin}
+              placeholder="HH:MM (ej: 16:00)"
+              onChange={(text) => {
+                const formatted = formatTimeInput(text);
+                setFormData(prev => ({ ...prev, hora_fin: formatted }));
+              }}
+              error={errors.hora_fin}
+              keyboardType="numeric"
+              maxLength={5}
+            />
+          </View>
+        </View>
 
         {/* Max Participants */}
         <TextField
-          label="Max Participants *"
+          label="Máximo de Participantes *"
           value={formData.max_participantes}
-          placeholder="Enter maximum number of participants"
+          placeholder="Ingresa el número máximo de participantes"
           onChange={(text) => setFormData(prev => ({ ...prev, max_participantes: text }))}
           error={errors.max_participantes}
           keyboardType="numeric"
@@ -554,12 +719,12 @@ export default function CreateEventScreen() {
             <View style={styles.submitButtonContent}>
               <ActivityIndicator size="small" color="#FFFFFF" />
               <Text style={[styles.submitButtonText, { marginLeft: 8 }]}>
-                Creating Event...
+                Creando Evento...
               </Text>
             </View>
           ) : (
             <Text style={styles.submitButtonText}>
-              Create Event
+              Crear Evento
             </Text>
           )}
         </Pressable>
@@ -568,6 +733,7 @@ export default function CreateEventScreen() {
   );
 }
 
+// Agregar al StyleSheet existente:
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -663,5 +829,9 @@ const styles = StyleSheet.create({
   submitButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  timeFieldsContainer: {
+    flexDirection: 'row',
+    marginBottom: 16,
   },
 });
