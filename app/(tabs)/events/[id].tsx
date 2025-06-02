@@ -17,9 +17,8 @@ import styles from '@/components/events/edit/editEvent.styles';
 import { ImagePickerField } from '@/components/events/edit/ImagePickerField';
 import { TextField } from '@/components/events/edit/TextField';
 import { TextAreaField } from '@/components/events/edit/TextAreaField';
-import { CategorySelector } from '@/components/events/edit/CategorySelector';
-import { DateTimeFields } from '@/components/events/edit/DateTimeFields';
 import { LocationField } from '@/components/events/edit/LocationField';
+import { PlatformField } from '@/components/events/edit/PlatformField';
 import { SubmitDeleteButtons } from '@/components/events/edit/SubmitDeleteButtons';
 import { SpeakerPicker } from '@/components/events/edit/SpeakerPicker';
 import { MultiSpeakerPicker } from '@/components/events/edit/MultiSpeakerPicker';
@@ -34,6 +33,8 @@ const {
 const BASE_URL = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`;
 
 type RawRow<T> = { entry_id: string; data: T & Record<string, any> };
+type ModalityType = 'Presencial' | 'Virtual' | 'Hibrida';
+type SpeakerOption = { id: string; name: string };
 
 type RawEvent = {
   id: number;
@@ -44,6 +45,10 @@ type RawEvent = {
   hora_inicio: string;
   hora_fin: string;
   lugar: string;
+  modalidad: ModalityType;
+  plataforma: string;
+  max_participantes: number;
+  suscritos: number;
   imageUrl: string;
   ponente: string | null;
   invitados_especiales: string[];
@@ -55,7 +60,6 @@ type RawEventTrack = { event_id: number; track_id: number };
 export default function EditEventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const isDark = useColorScheme() === 'dark';
-
   const { event, isLoading: loadingEvent } = useEvent(id);
 
   const [entryId, setEntryId] = useState('');
@@ -63,7 +67,6 @@ export default function EditEventScreen() {
   const [allTracks, setAllTracks] = useState<string[]>([]);
   const [selectedTracks, setSelectedTracks] = useState<string[]>([]);
   
-  type SpeakerOption = { id: string; name: string };
   const [speakerOptions, setSpeakerOptions] = useState<SpeakerOption[]>([]);
   const [mainSpeakerName, setMainSpeakerName] = useState<string>('');
   const [guestNames, setGuestNames] = useState<string[]>([]);
@@ -75,12 +78,17 @@ export default function EditEventScreen() {
     startTime: '',
     endTime: '',
     location: '',
+    modalidad: '' as ModalityType | '',
+    plataforma: '',
+    max_participantes: '',
     imageUrl: '',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const modalityOptions: ModalityType[] = ['Presencial', 'Virtual', 'Hibrida'];
 
   // Cargar entry_id del evento
   useEffect(() => {
@@ -196,6 +204,9 @@ export default function EditEventScreen() {
       startTime: startTime?.trim() || '',
       endTime: endTime?.trim() || '',
       location: event.location || '',
+      modalidad: 'Presencial', // Valor por defecto
+      plataforma: '',
+      max_participantes: '',
       imageUrl: event.imageUrl || '',
     });
 
@@ -237,7 +248,6 @@ export default function EditEventScreen() {
     if (!formData.date?.trim()) {
       newErrors.date = 'Date is required';
     } else {
-      // Validar formato de fecha YYYY-MM-DD
       const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
       if (!dateRegex.test(formData.date)) {
         newErrors.date = 'Date must be in YYYY-MM-DD format';
@@ -246,7 +256,6 @@ export default function EditEventScreen() {
     if (!formData.startTime?.trim()) {
       newErrors.startTime = 'Start time is required';
     } else {
-      // Validar formato de hora HH:MM
       const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
       if (!timeRegex.test(formData.startTime)) {
         newErrors.startTime = 'Start time must be in HH:MM format';
@@ -260,9 +269,18 @@ export default function EditEventScreen() {
         newErrors.endTime = 'End time must be in HH:MM format';
       }
     }
-    if (!formData.location?.trim()) {
-      newErrors.location = 'Location is required';
+    if (!formData.modalidad) {
+      newErrors.modalidad = 'Modality is required';
     }
+    
+    // Validaciones específicas por modalidad
+    if (formData.modalidad === 'Virtual' && !formData.plataforma.trim()) {
+      newErrors.plataforma = 'Platform is required for virtual events';
+    }
+    if ((formData.modalidad === 'Presencial' || formData.modalidad === 'Hibrida') && !formData.location?.trim()) {
+      newErrors.location = 'Location is required for in-person events';
+    }
+    
     if (!formData.imageUrl?.trim()) {
       newErrors.imageUrl = 'Image URL is required';
     }
@@ -314,7 +332,10 @@ export default function EditEventScreen() {
           fecha: formData.date.trim(),
           hora_inicio: formData.startTime.trim(),
           hora_fin: formData.endTime.trim(),
-          lugar: formData.location.trim(),
+          lugar: formData.modalidad === 'Virtual' ? '' : formData.location?.trim() || '',
+          modalidad: formData.modalidad,
+          plataforma: formData.modalidad === 'Virtual' ? formData.plataforma.trim() : '',
+          max_participantes: parseInt(formData.max_participantes) || row.data.max_participantes,
           imageUrl: formData.imageUrl.trim(),
           ponente: mainSpeakerName.trim() || null,
           invitados_especiales: guestNames.filter(g => g && g.trim() !== ''),
@@ -363,14 +384,12 @@ export default function EditEventScreen() {
 
       console.log('✅ Tracks sincronizados exitosamente');
 
-      // Mostrar mensaje de éxito
       if (Platform.OS === 'web') {
         alert('Event updated successfully!');
       } else {
         Alert.alert('Success', 'Event updated successfully!');
       }
 
-      // Regresar a la pantalla anterior
       router.back();
       
     } catch (err) {
@@ -485,13 +504,42 @@ export default function EditEventScreen() {
         />
 
         {/* Tracks */}
-        <CategorySelector
-          label="Tracks *"
-          options={allTracks}
-          selected={selectedTracks}
-          onSelect={toggleTrack}
-          error={errors.tracks}
-        />
+        <View style={styles.inputContainer}>
+          <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
+            Tracks *
+          </Text>
+          <View style={styles.categoryContainer}>
+            {allTracks.map((track, index) => {
+              const isSelected = selectedTracks.includes(track);
+              return (
+                <Pressable
+                  key={`track-${track}-${index}`}
+                  style={[
+                    styles.categoryChip,
+                    {
+                      backgroundColor: isSelected
+                        ? '#0A84FF'
+                        : isDark
+                        ? '#2C2C2E'
+                        : '#F2F2F7',
+                    },
+                  ]}
+                  onPress={() => toggleTrack(track)}
+                >
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      { color: isSelected ? '#FFF' : isDark ? '#FFF' : '#000' },
+                    ]}
+                  >
+                    {track}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {errors.tracks && <Text style={styles.errorText}>{errors.tracks}</Text>}
+        </View>
 
         {/* Ponente principal */}
         <SpeakerPicker
@@ -515,26 +563,107 @@ export default function EditEventScreen() {
           onSelect={toggleGuest}
         />
 
-        {/* Fecha y hora */}
-        <DateTimeFields
-          date={formData.date}
-          startTime={formData.startTime}
-          endTime={formData.endTime}
-          onDateChange={d => setFormData(p => ({ ...p, date: d }))}
-          onStartTimeChange={t => setFormData(p => ({ ...p, startTime: t }))}
-          onEndTimeChange={t => setFormData(p => ({ ...p, endTime: t }))}
-          errors={{ 
-            date: errors.date, 
-            startTime: errors.startTime, 
-            endTime: errors.endTime 
-          }}
-        />
+        {/* Modalidad */}
+        <View style={styles.inputContainer}>
+          <Text style={[styles.label, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+            Modalidad *
+          </Text>
+          <View style={styles.categoryContainer}>
+            {modalityOptions.map(modality => (
+              <Pressable
+                key={modality}
+                style={[
+                  styles.categoryChip,
+                  { 
+                    backgroundColor: formData.modalidad === modality 
+                      ? '#0A84FF' 
+                      : isDark ? '#2C2C2E' : '#F2F2F7'
+                  }
+                ]}
+                onPress={() => setFormData(prev => ({ ...prev, modalidad: modality }))}
+              >
+                <Text style={[
+                  styles.categoryChipText,
+                  { 
+                    color: formData.modalidad === modality 
+                      ? '#FFFFFF' 
+                      : isDark ? '#FFFFFF' : '#000000'
+                  }
+                ]}>
+                  {modality}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {errors.modalidad && <Text style={styles.errorText}>{errors.modalidad}</Text>}
+        </View>
 
-        {/* Ubicación */}
-        <LocationField
-          value={formData.location}
-          onChange={text => setFormData(p => ({ ...p, location: text }))}
-          error={errors.location}
+        {/* Platform (only for Virtual events) */}
+        {formData.modalidad === 'Virtual' && (
+          <PlatformField
+            value={formData.plataforma}
+            onChange={text => setFormData(p => ({ ...p, plataforma: text }))}
+            error={errors.plataforma}
+          />
+        )}
+
+        {/* Location (for Presencial and Hibrida) */}
+        {(formData.modalidad === 'Presencial' || formData.modalidad === 'Hibrida') && (
+          <LocationField
+            value={formData.location}
+            onChange={text => setFormData(p => ({ ...p, location: text }))}
+            error={errors.location}
+          />
+        )}
+
+        {/* Fecha y hora */}
+        <View style={styles.inputContainer}>
+          <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
+            Date *
+          </Text>
+          <TextField
+            value={formData.date}
+            placeholder="YYYY-MM-DD"
+            onChange={d => setFormData(p => ({ ...p, date: d }))}
+            error={errors.date}
+            label=''
+          />
+        </View>
+
+        <View style={styles.timeFieldsContainer || { flexDirection: 'row', gap: 16 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
+              Start Time *
+            </Text>
+            <TextField
+              value={formData.startTime}
+              placeholder="HH:MM"
+              onChange={t => setFormData(p => ({ ...p, startTime: t }))}
+              error={errors.startTime}
+              label=''
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
+              End Time *
+            </Text>
+            <TextField
+              value={formData.endTime}
+              placeholder="HH:MM"
+              onChange={t => setFormData(p => ({ ...p, endTime: t }))}
+              error={errors.endTime}
+              label=''
+            />
+          </View>
+        </View>
+
+        {/* Max Participants */}
+        <TextField
+          label="Max Participants"
+          value={formData.max_participantes}
+          placeholder="Enter max participants"
+          onChange={text => setFormData(p => ({ ...p, max_participantes: text }))}
+          keyboardType="numeric"
         />
 
         {/* Error general */}

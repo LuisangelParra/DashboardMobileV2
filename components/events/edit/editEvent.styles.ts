@@ -277,4 +277,48 @@ export default StyleSheet.create({
       },
     }),
   },
+  timeFieldsContainer: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  submitButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  // Date/Time Picker buttons
+  datePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+      },
+    }),
+  },
+  datePickerText: {
+    fontSize: 16,
+    flex: 1,
+  },
+  timePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+      },
+    }),
+  },
+  timePickerText: {
+    fontSize: 16,
+    flex: 1,
+  },
+  
 });
+

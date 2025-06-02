@@ -21,9 +21,12 @@ import { TextAreaField } from '@/components/events/edit/TextAreaField';
 import { CategorySelector } from '@/components/events/edit/CategorySelector';
 import { DateTimeFields } from '@/components/events/edit/DateTimeFields';
 import { LocationField } from '@/components/events/edit/LocationField';
+import { PlatformField } from '@/components/events/edit/PlatformField';
 import { SubmitDeleteButtons } from '@/components/events/edit/SubmitDeleteButtons';
 import { SpeakerPicker } from '@/components/events/edit/SpeakerPicker';
 import { MultiSpeakerPicker } from '@/components/events/edit/MultiSpeakerPicker';
+import { DatePickerField } from '@/components/events/edit/DatePickerField';
+import { TimePickerField } from '@/components/events/edit/TimePickerField';
 
 const {
   UNIDB_BASE_URL,
@@ -289,7 +292,7 @@ export default function EditEventScreen() {
             hora_inicio: eventInfo.hora_inicio || '',
             hora_fin: eventInfo.hora_fin || '',
             lugar: eventInfo.lugar || '',
-            modalidad: eventInfo.modalidad || '',
+            modalidad: eventInfo.modalidad || 'Presencial',
             plataforma: eventInfo.plataforma || '',
             max_participantes: String(eventInfo.max_participantes || ''),
             imageUrl: eventInfo.imageUrl || '',
@@ -355,14 +358,11 @@ export default function EditEventScreen() {
   };
 
   /* ---------- helpers ---------- */
-  const handleSpeakerSelect = (speakerId: string) => {
-    const speaker = speakerOptions.find(s => s.id === speakerId);
-    if (speaker) {
-      setPonente(speaker.name);
-      // Si estaba en invitados, quitarlo
-      if (invitadosEspeciales.includes(speaker.name)) {
-        setInvitadosEspeciales(prev => prev.filter(g => g !== speaker.name));
-      }
+  const handleSpeakerSelect = (name: string) => {
+    setPonente(name);
+    // Si estaba en invitados, quitarlo
+    if (invitadosEspeciales.includes(name)) {
+      setInvitadosEspeciales(prev => prev.filter(g => g !== name));
     }
   };
 
@@ -528,15 +528,24 @@ export default function EditEventScreen() {
   };
 
   /* ---------- eliminar ---------- */
-  const confirmDelete = () =>
-    Alert.alert(
-      'Eliminar Evento',
-      '¿Estás seguro de que quieres eliminar este evento y todas sus relaciones?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Eliminar', style: 'destructive', onPress: handleDelete },
-      ]
-    );
+  const confirmDelete = () => {
+    const message = 'Are you sure you want to delete this event and all its relations?';
+    
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) {
+        handleDelete();
+      }
+    } else {
+      Alert.alert(
+        'Delete Event',
+        message,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: handleDelete },
+        ]
+      );
+    }
+  };
 
   const handleDelete = async () => {
     if (!entryId) return;
@@ -602,7 +611,8 @@ export default function EditEventScreen() {
         <TextField
           label="Título del Evento *"
           value={formData.titulo || ''}
-          onChangeText={text => setFormData(p => ({ ...p, titulo: text || '' }))}
+          placeholder="Ingresa el título del evento"
+          onChange={text => setFormData(p => ({ ...p, titulo: text || '' }))}
           error={errors.titulo}
         />
 
@@ -610,7 +620,8 @@ export default function EditEventScreen() {
         <TextAreaField
           label="Descripción *"
           value={formData.descripcion || ''}
-          onChangeText={text => setFormData(p => ({ ...p, descripcion: text || '' }))}
+          placeholder="Ingresa la descripción del evento"
+          onChange={text => setFormData(p => ({ ...p, descripcion: text || '' }))}
           error={errors.descripcion}
         />
 
@@ -712,12 +723,10 @@ export default function EditEventScreen() {
 
         {/* Platform (only for Virtual events) */}
         {formData.modalidad === 'Virtual' && (
-          <TextField
-            label="Plataforma *"
+          <PlatformField
             value={formData.plataforma}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, plataforma: text }))}
+            onChange={(text) => setFormData(prev => ({ ...prev, plataforma: text }))}
             error={errors.plataforma}
-            placeholder="ej: Zoom, Google Meet, Teams"
           />
         )}
 
@@ -738,13 +747,12 @@ export default function EditEventScreen() {
           <TextField
             value={formData.fecha}
             placeholder="YYYY-MM-DD (ej: 2024-12-25)"
-            onChangeText={(text) => {
+            onChange={(text) => {
               const formatted = formatDateInput(text);
               setFormData(prev => ({ ...prev, fecha: formatted }));
             }}
             error={errors.fecha}
             keyboardType="numeric"
-            maxLength={10}
           />
         </View>
 
@@ -756,13 +764,12 @@ export default function EditEventScreen() {
             <TextField
               value={formData.hora_inicio}
               placeholder="HH:MM (ej: 14:30)"
-              onChangeText={(text) => {
+              onChange={(text) => {
                 const formatted = formatTimeInput(text);
                 setFormData(prev => ({ ...prev, hora_inicio: formatted }));
               }}
               error={errors.hora_inicio}
               keyboardType="numeric"
-              maxLength={5}
             />
           </View>
           
@@ -773,13 +780,12 @@ export default function EditEventScreen() {
             <TextField
               value={formData.hora_fin}
               placeholder="HH:MM (ej: 16:00)"
-              onChangeText={(text) => {
+              onChange={(text) => {
                 const formatted = formatTimeInput(text);
                 setFormData(prev => ({ ...prev, hora_fin: formatted }));
               }}
               error={errors.hora_fin}
               keyboardType="numeric"
-              maxLength={5}
             />
           </View>
         </View>
@@ -789,7 +795,7 @@ export default function EditEventScreen() {
           label="Máximo de Participantes *"
           value={formData.max_participantes}
           placeholder="Ingresa el número máximo de participantes"
-          onChangeText={(text) => setFormData(prev => ({ ...prev, max_participantes: text }))}
+          onChange={(text) => setFormData(prev => ({ ...prev, max_participantes: text }))}
           error={errors.max_participantes}
           keyboardType="numeric"
         />
