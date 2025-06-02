@@ -641,7 +641,7 @@ export default function CreateEventScreen() {
             }}
             error={errors.fecha}
             keyboardType="numeric"
-            maxLength={10}
+            label=''
           />
         </View>
 
@@ -662,7 +662,7 @@ export default function CreateEventScreen() {
               }}
               error={errors.hora_inicio}
               keyboardType="numeric"
-              maxLength={5}
+              label=''
             />
           </View>
           
@@ -682,7 +682,7 @@ export default function CreateEventScreen() {
               }}
               error={errors.hora_fin}
               keyboardType="numeric"
-              maxLength={5}
+              label=''
             />
           </View>
         </View>
