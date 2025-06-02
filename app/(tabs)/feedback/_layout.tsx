@@ -8,6 +8,7 @@ export default function FeedbackLayout() {
   return (
     <Stack
       screenOptions={{
+        headerShown: false, // ✅ QUITAR HEADER DUPLICADO
         headerStyle: {
           backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
         },
