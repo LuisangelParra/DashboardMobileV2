@@ -10,8 +10,7 @@ import { LocationField } from '@/components/events/edit/LocationField';
 import { SpeakerPicker } from '@/components/events/edit/SpeakerPicker';
 import { MultiSpeakerPicker } from '@/components/events/edit/MultiSpeakerPicker';
 import { CategorySelector } from '@/components/events/edit/CategorySelector';
-import { DatePickerField } from '@/components/events/edit/DatePickerField';
-import { TimePickerField } from '@/components/events/edit/TimePickerField';
+
 import Constants from 'expo-constants';
 
 const {
