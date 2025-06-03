@@ -6,9 +6,14 @@ import { EventSubscription } from '@/hooks/useDashboard';
 type SubscriptionsTableProps = {
   subscriptions: EventSubscription[];
   isLoading?: boolean;
+  maxEvents?: number;
 };
 
-export function SubscriptionsTable({ subscriptions, isLoading = false }: SubscriptionsTableProps) {
+export function SubscriptionsTable({ 
+  subscriptions, 
+  isLoading = false, 
+  maxEvents // ✅ NUEVO: Sin límite por defecto
+}: SubscriptionsTableProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
@@ -96,12 +101,14 @@ export function SubscriptionsTable({ subscriptions, isLoading = false }: Subscri
     );
   }
 
+  const displayedSubscriptions = maxEvents ? subscriptions.slice(0, maxEvents) : subscriptions;
+  const hiddenEventsCount = subscriptions.length - displayedSubscriptions.length;
+
   return (
     <View style={[
       styles.container,
       { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
     ]}>
-      {/* Header */}
       <View style={styles.header}>
         <Users size={20} color="#0A84FF" />
         <Text style={[
@@ -113,13 +120,26 @@ export function SubscriptionsTable({ subscriptions, isLoading = false }: Subscri
         <TrendingUp size={16} color="#32D74B" />
       </View>
 
-      {/* Content - Always use card layout for better mobile support */}
+      {maxEvents && hiddenEventsCount > 0 && (
+        <View style={[
+          styles.infoBar,
+          { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.03)' }
+        ]}>
+          <Text style={[
+            styles.infoText,
+            { color: isDark ? '#8E8E93' : '#6C6C70' }
+          ]}>
+            Mostrando {displayedSubscriptions.length} de {subscriptions.length} eventos
+          </Text>
+        </View>
+      )}
+
       <ScrollView 
         style={styles.content} 
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled={true}
       >
-        {subscriptions.slice(0, 8).map((subscription, index) => (
+        {displayedSubscriptions.map((subscription, index) => (
           <View
             key={`subscription-${subscription.id}-${index}`}
             style={[
@@ -130,7 +150,6 @@ export function SubscriptionsTable({ subscriptions, isLoading = false }: Subscri
               }
             ]}
           >
-            {/* Event Info Row */}
             <View style={styles.eventInfo}>
               <View style={styles.eventNameSection}>
                 <Text
@@ -154,9 +173,7 @@ export function SubscriptionsTable({ subscriptions, isLoading = false }: Subscri
               </View>
             </View>
 
-            {/* Stats Row */}
             <View style={styles.statsRow}>
-              {/* Subscribers */}
               <View style={styles.statItem}>
                 <Text style={[
                   styles.statValue,
@@ -172,7 +189,6 @@ export function SubscriptionsTable({ subscriptions, isLoading = false }: Subscri
                 </Text>
               </View>
 
-              {/* Capacity */}
               <View style={styles.statItem}>
                 <Text style={[
                   styles.statValue,
@@ -188,7 +204,6 @@ export function SubscriptionsTable({ subscriptions, isLoading = false }: Subscri
                 </Text>
               </View>
 
-              {/* Percentage */}
               <View style={styles.statItem}>
                 <Text style={[
                   styles.statValue,
@@ -204,7 +219,6 @@ export function SubscriptionsTable({ subscriptions, isLoading = false }: Subscri
                 </Text>
               </View>
 
-              {/* Status */}
               <View style={styles.statusSection}>
                 <View style={[
                   styles.statusBadge,
@@ -223,7 +237,6 @@ export function SubscriptionsTable({ subscriptions, isLoading = false }: Subscri
         ))}
       </ScrollView>
 
-      {/* Summary */}
       <View style={[
         styles.summary,
         { borderTopColor: isDark ? '#48484A' : '#E5E5EA' }
@@ -232,7 +245,8 @@ export function SubscriptionsTable({ subscriptions, isLoading = false }: Subscri
           styles.summaryText,
           { color: isDark ? '#8E8E93' : '#6C6C70' }
         ]}>
-          Total suscripciones: {subscriptions.reduce((sum, event) => sum + event.subscribers, 0)}
+          Total suscripciones: {subscriptions.reduce((sum, event) => sum + event.subscribers, 0)} • 
+          Eventos: {subscriptions.length}
         </Text>
       </View>
     </View>
@@ -249,7 +263,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
-    maxHeight: 400,
+    maxHeight: 500,
     minHeight: 200,
   },
   header: {
@@ -264,6 +278,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     flex: 1,
+  },
+  infoBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  infoText: {
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   content: {
     flex: 1,

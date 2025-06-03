@@ -119,7 +119,6 @@ export default function DashboardScreen() {
         ))}
       </View>
 
-      {/* ✅ NUEVA TABLA: Suscripciones por evento */}
       <SubscriptionsTable 
         subscriptions={stats.eventSubscriptions}
         isLoading={isLoading}

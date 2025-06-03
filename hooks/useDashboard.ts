@@ -259,10 +259,29 @@ export function useDashboard() {
               date: event.fecha || ''
             }
           })
-          .sort((a, b) => b.subscribers - a.subscribers) // Ordenar por más suscriptores
+          // ✅ NUEVO: Ordenar por fecha (más recientes primero) y luego por suscriptores
+          .sort((a, b) => {
+            // Primero por fecha (más recientes primero)
+            const dateA = new Date(a.date || '1970-01-01')
+            const dateB = new Date(b.date || '1970-01-01')
+            const dateDiff = dateB.getTime() - dateA.getTime()
+            
+            // Si las fechas son iguales, ordenar por suscriptores (descendente)
+            if (Math.abs(dateDiff) < 24 * 60 * 60 * 1000) { // Diferencia menor a 1 día
+              return b.subscribers - a.subscribers
+            }
+            
+            return dateDiff
+          })
 
         console.log('📈 Events by track:', filteredEventsByTrack)
         console.log('👥 Event subscriptions:', eventSubscriptions)
+        
+        // ✅ NUEVO: Debug detallado de suscripciones
+        console.log('🔍 Subscription details:')
+        eventSubscriptions.forEach((event, index) => {
+          console.log(`  ${index + 1}. ${event.name} - ${event.subscribers}/${event.maxParticipants} (${event.occupancyRate}%) - ${event.date}`)
+        })
 
         // 13. Calcular actividad reciente
         const weekAgo = new Date()
