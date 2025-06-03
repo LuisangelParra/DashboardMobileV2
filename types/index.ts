@@ -12,7 +12,9 @@ export type Event = {
   imageUrl: string;
   rating: number;
   ratingCount: number;
-  tracks: EventCategory[];  
+  tracks: EventCategory[];
+  subscribedCount: number;
+  maxParticipants: number;
 };
 
 // Speaker types
