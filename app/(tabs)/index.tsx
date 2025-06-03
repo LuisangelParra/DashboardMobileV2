@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Users, Calendar, MessageCircle, Star, TrendingUp, Clock } from 'lucide-react-native';
 import { DashboardMetricCard } from '@/components/dashboard/DashboardMetricCard';
+import { SubscriptionsTable } from '@/components/dashboard/SubscriptionsTable'; // ✅ NUEVO IMPORT
 import { useDashboard } from '@/hooks/useDashboard';
 
 export default function DashboardScreen() {
@@ -117,6 +118,12 @@ export default function DashboardScreen() {
           />
         ))}
       </View>
+
+      {/* ✅ NUEVA TABLA: Suscripciones por evento */}
+      <SubscriptionsTable 
+        subscriptions={stats.eventSubscriptions}
+        isLoading={isLoading}
+      />
 
       {/* Categories Overview */}
       <View style={[

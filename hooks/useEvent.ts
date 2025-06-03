@@ -14,7 +14,7 @@ const BASE_URL = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`
 
 type RawRow<T> = { entry_id: string; data: T }
 
-// 1) Forma cruda de un evento en la DB (fíjate en "lugar", no "location")
+// ✅ ACTUALIZADO: Incluir campos de capacidad
 type RawEvent = {
   id: number
   titulo: string
@@ -23,18 +23,17 @@ type RawEvent = {
   fecha: string
   hora_inicio: string
   hora_fin: string
-  lugar: string      // <– aquí se llama “lugar” en la DB
+  lugar: string
   imageUrl: string
   suscritos: number
+  max_participantes: number
 }
 
-// 2) Raw de la tabla puente event_speakers
 type RawEventSpeaker = {
   event_id: number
   speaker_id: number
 }
 
-// 3) Raw de feedback
 type RawFeedback = {
   id: number
   event_id: number
@@ -49,13 +48,20 @@ export function useEvent(id: string) {
   const [feedback, setFeedback] = useState<Feedback[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Función que hace todo el fetch y mapea a nuestros tipos
   const fetchEventDetails = useCallback(async () => {
     if (!id) return
     setIsLoading(true)
     try {
+      // ✅ AGREGAR TIMESTAMP PARA DATOS EN TIEMPO REAL
+      const timestamp = Date.now()
+      
       // --- 1) Leer todos los eventos ---
-      const resE = await fetch(`${BASE_URL}/data/events/all?format=json`)
+      const resE = await fetch(`${BASE_URL}/data/events/all?format=json&t=${timestamp}`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      })
       const { data: rawE } = (await resE.json()) as { data: RawRow<RawEvent>[] }
       const rawEvents = rawE.map(r => r.data)
 
@@ -68,7 +74,7 @@ export function useEvent(id: string) {
       }
 
       // --- 2) Leer relaciones event_speakers ---
-      const resRel = await fetch(`${BASE_URL}/data/event_speakers/all?format=json`)
+      const resRel = await fetch(`${BASE_URL}/data/event_speakers/all?format=json&t=${timestamp}`)
       const { data: rawRel } = (await resRel.json()) as { data: RawRow<RawEventSpeaker>[] }
       const rels = rawRel.map(r => r.data)
       const speakerIds = Array.from(
@@ -78,7 +84,7 @@ export function useEvent(id: string) {
       )
 
       // --- 3) Leer todos los speakers ---
-      const resS = await fetch(`${BASE_URL}/data/speakers/all?format=json`)
+      const resS = await fetch(`${BASE_URL}/data/speakers/all?format=json&t=${timestamp}`)
       const { data: rawS } = (await resS.json()) as { data: RawRow<{ id: number; name: string }>[] }
       const rawSpeakers = rawS.map(r => r.data)
       const speakerMap = new Map<number, Speaker>()
@@ -97,7 +103,7 @@ export function useEvent(id: string) {
       setSpeakers(Array.from(speakerMap.values()))
 
       // --- 4) Leer todos los feedbacks ---
-      const resF = await fetch(`${BASE_URL}/data/feedbacks/all?format=json`)
+      const resF = await fetch(`${BASE_URL}/data/feedbacks/all?format=json&t=${timestamp}`)
       const { data: rawF } = (await resF.json()) as { data: RawRow<RawFeedback>[] }
       const allFb = rawF.map(r => r.data)
       const fList = allFb.filter(f => String(f.event_id) === id)
@@ -118,7 +124,7 @@ export function useEvent(id: string) {
         ? fList.reduce((sum, x) => sum + x.rating, 0) / ratingCount
         : 0
 
-      // --- 6) Mapear a nuestro tipo Event (agregamos tracks: [])
+      // --- 6) Mapear a nuestro tipo Event (INCLUYENDO CAPACIDAD) ---
       setEvent({
         id: String(rawEv.id),
         name: rawEv.titulo,
@@ -126,11 +132,14 @@ export function useEvent(id: string) {
         category: rawEv.tema as EventCategory,
         date: rawEv.fecha,
         time: `${rawEv.hora_inicio} - ${rawEv.hora_fin}`,
-        location: rawEv.lugar,         // <– usamos “lugar”
+        location: rawEv.lugar,
         imageUrl: rawEv.imageUrl,
         rating,
         ratingCount,
-        tracks: []                      // <– añadimos tracks (vacío) para que coincida con Event
+        tracks: [],
+        // ✅ NUEVOS CAMPOS DE CAPACIDAD
+        currentCapacity: rawEv.suscritos || 0,
+        maxCapacity: rawEv.max_participantes || 0
       })
     } catch (err) {
       console.error('useEvent error:', err)
@@ -139,9 +148,15 @@ export function useEvent(id: string) {
     }
   }, [id])
 
-  // Ejecutar carga inicial y exponer reload
+  // ✅ POLLING CADA 30 SEGUNDOS PARA DATOS EN TIEMPO REAL
   useEffect(() => {
     fetchEventDetails()
+    
+    const interval = setInterval(() => {
+      fetchEventDetails()
+    }, 30000) // Actualizar cada 30 segundos
+    
+    return () => clearInterval(interval)
   }, [fetchEventDetails])
 
   // Eliminar evento (y sus relaciones en event_speakers) basándose en el id

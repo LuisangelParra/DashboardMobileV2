@@ -116,6 +116,31 @@ export default StyleSheet.create({
     fontSize: 13,
     marginLeft: 4,
   },
+  // ✅ NUEVOS ESTILOS PARA CAPACIDAD
+  eventCapacity: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(142, 142, 147, 0.1)',
+  },
+  capacityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  capacityText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  capacityStatus: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -165,5 +190,25 @@ export default StyleSheet.create({
   emptyText: {
     fontSize: 16,
     textAlign: 'center',
+  },
+  // ✅ ESTILOS PARA BANNER OPTIMISTA
+  optimisticBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#007AFF',
+  },
+  optimisticText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  emptySubText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 8,
   },
 });

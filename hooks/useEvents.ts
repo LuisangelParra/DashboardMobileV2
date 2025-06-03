@@ -54,15 +54,16 @@ type RawEventTrack = {
 export function useEvents(params: {
   search?: string
   category?: EventCategory | null
+  optimisticEvent?: Event | null
 } = {}) {
   const [events, setEvents] = useState<Event[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchAll = useCallback(async () => {
-    console.log('🔄 useEvents: Fetching events...')
+    console.log('🔄 useEvents: Fetching events with capacity data...')
     setIsLoading(true)
     try {
-      // Agregar timestamp para evitar cache
+      // ✅ AGREGAR TIMESTAMP PARA DATOS EN TIEMPO REAL
       const timestamp = Date.now()
       
       // 1) Leer todos los eventos
@@ -119,7 +120,7 @@ export function useEvents(params: {
         tracksByEvent[event_id].push(track_id)
       })
 
-      // 9) Mapear cada evento crudo a nuestro tipo Event
+      // 9) Mapear cada evento crudo a nuestro tipo Event (INCLUYENDO CAPACIDAD)
       const mapped = uniqueEventsList.map(e => {
         const fList = feedbackByEvent[e.id] || []
         const count = fList.length
@@ -148,7 +149,10 @@ export function useEvents(params: {
           imageUrl: e.imageUrl,
           rating: avg,
           ratingCount: count,
-          tracks: trackNames
+          tracks: trackNames,
+          // ✅ NUEVOS CAMPOS DE CAPACIDAD
+          currentCapacity: e.suscritos || 0,
+          maxCapacity: e.max_participantes || 0
         }
       })
 
@@ -167,14 +171,19 @@ export function useEvents(params: {
         )
       }
 
-      // 11) Ordenar por fecha (más recientes primero)
+      // 11) Agregar evento optimista si existe
+      if (params.optimisticEvent) {
+        filtered = [params.optimisticEvent, ...filtered]
+      }
+
+      // 12) Ordenar por fecha (más recientes primero)
       filtered.sort((a, b) => {
         const dateA = new Date(a.date)
         const dateB = new Date(b.date)
         return dateB.getTime() - dateA.getTime()
       })
 
-      console.log('✅ useEvents: Final filtered events:', filtered.length)
+      console.log('✅ useEvents: Final filtered events with capacity:', filtered.length)
       setEvents(filtered)
     } catch (err) {
       console.error('❌ useEvents error:', err)
@@ -182,17 +191,23 @@ export function useEvents(params: {
     } finally {
       setIsLoading(false)
     }
-  }, [params.search, params.category])
+  }, [params.search, params.category, params.optimisticEvent])
 
-  // Ejecutar al montar y cuando cambien los parámetros
+  // ✅ POLLING CADA 60 SEGUNDOS PARA CAPACIDAD EN TIEMPO REAL
   useEffect(() => {
     fetchAll()
+    
+    const interval = setInterval(() => {
+      fetchAll()
+    }, 60000) // Actualizar cada minuto
+    
+    return () => clearInterval(interval)
   }, [fetchAll])
 
   // Recargar automáticamente cuando la pantalla reciba el foco
   useFocusEffect(
     useCallback(() => {
-      console.log('🎯 Events screen focused - refreshing data')
+      console.log('🎯 Events screen focused - refreshing capacity data')
       fetchAll()
     }, [fetchAll])
   )

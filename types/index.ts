@@ -13,6 +13,9 @@ export type Event = {
   rating: number;
   ratingCount: number;
   tracks: EventCategory[];  
+  // ✅ NUEVOS CAMPOS PARA CAPACIDAD
+  currentCapacity: number;  // suscritos actuales
+  maxCapacity: number;      // máximo de participantes
 };
 
 // Speaker types

@@ -23,6 +23,7 @@ type RawEvent = {
   location: string
   imageUrl: string
   suscritos: number
+  max_participantes: number
 }
 
 type RawSpeaker = {
@@ -53,6 +54,17 @@ type RawEventTrack = {
   track_id: number
 }
 
+// ✅ NUEVO TIPO: Para datos de suscripciones por evento
+export type EventSubscription = {
+  id: string
+  name: string
+  subscribers: number
+  maxParticipants: number
+  occupancyRate: number
+  status: 'available' | 'almost-full' | 'full'
+  date: string
+}
+
 export type DashboardStats = {
   totalEvents: number
   totalSpeakers: number
@@ -60,8 +72,10 @@ export type DashboardStats = {
   averageRating: number
   upcomingEvents: number
   pastEvents: number
-  eventsByCategory: Record<string, number> // Ahora será por tracks reales
+  eventsByCategory: Record<string, number>
   recentActivity: number
+  // ✅ NUEVO CAMPO: Suscripciones por evento
+  eventSubscriptions: EventSubscription[]
 }
 
 export function useDashboard() {
@@ -73,7 +87,8 @@ export function useDashboard() {
     upcomingEvents: 0,
     pastEvents: 0,
     eventsByCategory: {},
-    recentActivity: 0
+    recentActivity: 0,
+    eventSubscriptions: []
   })
   const [isLoading, setIsLoading] = useState(true)
 
@@ -81,9 +96,8 @@ export function useDashboard() {
     const fetchDashboardData = async () => {
       setIsLoading(true)
       try {
-        console.log('📊 Fetching dashboard data with real tracks...')
+        console.log('📊 Fetching dashboard data with subscriptions...')
         
-        // Agregar timestamp para evitar cache
         const timestamp = Date.now()
 
         // 1. Fetch events
@@ -124,7 +138,7 @@ export function useDashboard() {
           eventTracks: eventTracks.length
         })
 
-        // 6. Eliminar duplicados con Map (igual que en otros hooks)
+        // 6. Eliminar duplicados con Map
         const eventMap = new Map<number, RawEvent>()
         baseEvents.forEach(e => {
           if (!eventMap.has(e.id)) {
@@ -193,23 +207,19 @@ export function useDashboard() {
           ? validRatings.reduce((sum, f) => sum + f.rating, 0) / validRatings.length 
           : 0
 
-        // 11. Calcular eventos por track (la parte importante)
+        // 11. Calcular eventos por track
         const eventsByTrack: Record<string, number> = {}
 
-        // Inicializar todos los tracks con 0
         tracks.forEach(track => {
           eventsByTrack[track.nombre] = 0
         })
 
-        // Contar eventos por track usando las relaciones reales
         uniqueEvents.forEach(event => {
           const trackIds = eventToTracksMap[event.id] || []
           
           if (trackIds.length === 0) {
-            // Si no tiene tracks asignados, contarlo como "Sin categoría"
             eventsByTrack['Sin categoría'] = (eventsByTrack['Sin categoría'] || 0) + 1
           } else {
-            // Contar el evento para cada track asignado
             trackIds.forEach(trackId => {
               const trackName = trackMap[trackId]
               if (trackName) {
@@ -219,21 +229,49 @@ export function useDashboard() {
           }
         })
 
-        // Filtrar tracks que tienen al menos 1 evento
         const filteredEventsByTrack = Object.fromEntries(
           Object.entries(eventsByTrack).filter(([_, count]) => count > 0)
         )
 
-        console.log('📈 Events by track:', filteredEventsByTrack)
+        // ✅ 12. NUEVO: Calcular suscripciones por evento
+        const eventSubscriptions: EventSubscription[] = uniqueEvents
+          .map(event => {
+            const subscribers = event.suscritos || 0
+            const maxParticipants = event.max_participantes || 0
+            const occupancyRate = maxParticipants > 0 ? (subscribers / maxParticipants) * 100 : 0
+            
+            let status: 'available' | 'almost-full' | 'full' = 'available'
+            if (maxParticipants > 0) {
+              if (subscribers >= maxParticipants) {
+                status = 'full'
+              } else if (occupancyRate >= 80) {
+                status = 'almost-full'
+              }
+            }
 
-        // 12. Calcular actividad reciente (feedbacks de últimos 7 días)
+            return {
+              id: String(event.id),
+              name: event.titulo || 'Sin título',
+              subscribers,
+              maxParticipants,
+              occupancyRate: Math.round(occupancyRate),
+              status,
+              date: event.fecha || ''
+            }
+          })
+          .sort((a, b) => b.subscribers - a.subscribers) // Ordenar por más suscriptores
+
+        console.log('📈 Events by track:', filteredEventsByTrack)
+        console.log('👥 Event subscriptions:', eventSubscriptions)
+
+        // 13. Calcular actividad reciente
         const weekAgo = new Date()
         weekAgo.setDate(weekAgo.getDate() - 7)
         const recentActivity = feedbacks.filter(f => 
           f.created_at && new Date(f.created_at) >= weekAgo
         ).length
 
-        // 13. Actualizar estado
+        // 14. Actualizar estado
         setStats({
           totalEvents: uniqueEvents.length,
           totalSpeakers: uniqueSpeakers.length,
@@ -241,11 +279,12 @@ export function useDashboard() {
           averageRating: Number(averageRating.toFixed(1)),
           upcomingEvents,
           pastEvents,
-          eventsByCategory: filteredEventsByTrack, // Ahora usa tracks reales
-          recentActivity
+          eventsByCategory: filteredEventsByTrack,
+          recentActivity,
+          eventSubscriptions // ✅ NUEVO CAMPO
         })
 
-        console.log('✅ Dashboard stats updated with real tracks')
+        console.log('✅ Dashboard stats updated with subscriptions data')
 
       } catch (error) {
         console.error('❌ Error fetching dashboard data:', error)
@@ -257,7 +296,8 @@ export function useDashboard() {
           upcomingEvents: 0,
           pastEvents: 0,
           eventsByCategory: {},
-          recentActivity: 0
+          recentActivity: 0,
+          eventSubscriptions: []
         })
       } finally {
         setIsLoading(false)
