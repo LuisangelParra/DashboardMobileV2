@@ -103,6 +103,9 @@ export default StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
+  capacityContainer: {
+    marginBottom: 12,
+  },
   eventMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
