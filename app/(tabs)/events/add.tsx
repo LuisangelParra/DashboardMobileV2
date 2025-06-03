@@ -784,7 +784,7 @@ export default function CreateEventScreen() {
               styles.label,
               { color: isDark ? '#FFFFFF' : '#000000' }
             ]}>
-              Categorías * (selecciona al menos una)
+              Categorías
             </Text>
             
             {/* ✅ BOTONES NUEVA Y BORRAR */}
@@ -1531,5 +1531,9 @@ const styles = StyleSheet.create({
   modalButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  imageContainer: {
+    height: 240,
+    position: 'relative',
   },
 });

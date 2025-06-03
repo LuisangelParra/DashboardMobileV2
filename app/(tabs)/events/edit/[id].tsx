@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -18,15 +17,13 @@ import styles from '@/components/events/edit/editEvent.styles';
 import { ImagePickerField } from '@/components/events/edit/ImagePickerField';
 import { TextField } from '@/components/events/edit/TextField';
 import { TextAreaField } from '@/components/events/edit/TextAreaField';
-import { CategorySelector } from '@/components/events/edit/CategorySelector';
-import { DateTimeFields } from '@/components/events/edit/DateTimeFields';
 import { LocationField } from '@/components/events/edit/LocationField';
 import { PlatformField } from '@/components/events/edit/PlatformField';
+import { DatePickerField } from '@/components/events/edit/DatePickerField';
+import { TimePickerField } from '@/components/events/edit/TimePickerField';
 import { SubmitDeleteButtons } from '@/components/events/edit/SubmitDeleteButtons';
 import { SpeakerPicker } from '@/components/events/edit/SpeakerPicker';
 import { MultiSpeakerPicker } from '@/components/events/edit/MultiSpeakerPicker';
-import { DatePickerField } from '@/components/events/edit/DatePickerField';
-import { TimePickerField } from '@/components/events/edit/TimePickerField';
 
 const {
   UNIDB_BASE_URL,
@@ -37,7 +34,6 @@ const {
 });
 const BASE_URL = `${UNIDB_BASE_URL}/${UNIDB_CONTRACT_KEY}`;
 
-/* ---------- tipos ---------- */
 type RawRow<T> = { entry_id: string; data: T & Record<string, any> };
 type ModalityType = 'Presencial' | 'Virtual' | 'Hibrida';
 type SpeakerOption = { id: string; name: string };
@@ -62,40 +58,33 @@ type RawEvent = {
 
 type RawTrack = { id: number; nombre: string };
 type RawEventTrack = { event_id: number; track_id: number };
-type RawEventSpeaker = { event_id: number; speaker_id: number };
 
 export default function EditEventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const isDark = useColorScheme() === 'dark';
-
-  /* ---------- datos base del evento ---------- */
   const { event, isLoading: loadingEvent } = useEvent(id);
 
-  /* ---------- entry_id de la tabla events ---------- */
   const [entryId, setEntryId] = useState('');
+  const [trackNameToId, setTrackNameToId] = useState<Record<string, number>>({});
+  const [allTracks, setAllTracks] = useState<string[]>([]);
+  const [selectedTracks, setSelectedTracks] = useState<string[]>([]);
   
-  /* ---------- formulario completo ---------- */
+  const [speakerOptions, setSpeakerOptions] = useState<SpeakerOption[]>([]);
+  const [mainSpeakerName, setMainSpeakerName] = useState<string>('');
+  const [guestNames, setGuestNames] = useState<string[]>([]);
+
   const [formData, setFormData] = useState({
-    titulo: '',
-    descripcion: '',
-    tema: '',
-    fecha: '',
-    hora_inicio: '',
-    hora_fin: '',
-    lugar: '',
+    name: '',
+    description: '',
+    date: '',
+    startTime: '',
+    endTime: '',
+    location: '',
     modalidad: '' as ModalityType | '',
     plataforma: '',
     max_participantes: '',
     imageUrl: '',
   });
-
-  const [ponente, setPonente] = useState<string>('');
-  const [invitadosEspeciales, setInvitadosEspeciales] = useState<string[]>([]);
-
-  /* ---------- opciones disponibles ---------- */
-  const [speakerOptions, setSpeakerOptions] = useState<SpeakerOption[]>([]);
-  const [allTracks, setAllTracks] = useState<string[]>([]);
-  const [trackNameToId, setTrackNameToId] = useState<Record<string, number>>({});
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -103,43 +92,7 @@ export default function EditEventScreen() {
 
   const modalityOptions: ModalityType[] = ['Presencial', 'Virtual', 'Hibrida'];
 
-  /* ---------- helper functions ---------- */
-  const formatDateInput = (input: string): string => {
-    const numbers = input.replace(/\D/g, '');
-    
-    if (numbers.length >= 8) {
-      const year = numbers.slice(0, 4);
-      const month = numbers.slice(4, 6);
-      const day = numbers.slice(6, 8);
-      return `${year}-${month}-${day}`;
-    } else if (numbers.length >= 6) {
-      const year = numbers.slice(0, 4);
-      const month = numbers.slice(4, 6);
-      const day = numbers.slice(6);
-      return `${year}-${month}-${day}`;
-    } else if (numbers.length >= 4) {
-      const year = numbers.slice(0, 4);
-      const month = numbers.slice(4);
-      return `${year}-${month}`;
-    }
-    return numbers;
-  };
-
-  const formatTimeInput = (input: string): string => {
-    const numbers = input.replace(/\D/g, '');
-    
-    if (numbers.length >= 4) {
-      const hours = numbers.slice(0, 2);
-      const minutes = numbers.slice(2, 4);
-      return `${hours}:${minutes}`;
-    } else if (numbers.length >= 2) {
-      const hours = numbers.slice(0, 2);
-      const minutes = numbers.slice(2);
-      return `${hours}:${minutes}`;
-    }
-    return numbers;
-  };
-
+  // ✅ MISMAS VALIDACIONES QUE EN CREATE
   const validateDate = (date: string): string | null => {
     if (!date.trim()) return 'La fecha es requerida';
     
@@ -149,6 +102,10 @@ export default function EditEventScreen() {
     }
     
     const [year, month, day] = date.split('-').map(Number);
+    
+    if (year < 2024 || year > 2030) {
+      return 'El año debe estar entre 2024 y 2030';
+    }
     
     if (month < 1 || month > 12) {
       return 'El mes debe estar entre 01 y 12';
@@ -162,17 +119,10 @@ export default function EditEventScreen() {
     if (parsedDate.getFullYear() !== year || 
         parsedDate.getMonth() !== month - 1 || 
         parsedDate.getDate() !== day) {
-      return 'Fecha inválida';
+      return 'Fecha inválida (día no existe en ese mes)';
     }
     
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    parsedDate.setHours(0, 0, 0, 0);
-    
-    if (parsedDate < today) {
-      return 'La fecha no puede ser anterior al día de hoy';
-    }
-    
+    // Para edición, permitir fechas pasadas (eventos ya creados)
     return null;
   };
 
@@ -198,7 +148,10 @@ export default function EditEventScreen() {
   };
 
   const validateTimeRange = (startTime: string, endTime: string): string | null => {
-    if (!startTime || !endTime) return null;
+    const startError = validateTime(startTime);
+    const endError = validateTime(endTime);
+    
+    if (startError || endError) return null;
     
     const [startHour, startMin] = startTime.split(':').map(Number);
     const [endHour, endMin] = endTime.split(':').map(Number);
@@ -221,313 +174,301 @@ export default function EditEventScreen() {
     return null;
   };
 
-  /* ---------- cargar entry_id ---------- */
+  // ✅ VALIDACIÓN EN TIEMPO REAL PARA HORAS
+  const handleStartTimeChange = (time: string) => {
+    setFormData(prev => ({ ...prev, startTime: time }));
+    
+    if (errors.startTime) {
+      setErrors(prev => ({ ...prev, startTime: '' }));
+    }
+    
+    if (time && formData.endTime && validateTime(time) === null && validateTime(formData.endTime) === null) {
+      const rangeError = validateTimeRange(time, formData.endTime);
+      if (rangeError) {
+        setErrors(prev => ({ ...prev, endTime: rangeError }));
+      } else {
+        setErrors(prev => ({ ...prev, endTime: '' }));
+      }
+    }
+  };
+
+  const handleEndTimeChange = (time: string) => {
+    setFormData(prev => ({ ...prev, endTime: time }));
+    
+    if (errors.endTime) {
+      setErrors(prev => ({ ...prev, endTime: '' }));
+    }
+    
+    if (time && formData.startTime && validateTime(formData.startTime) === null && validateTime(time) === null) {
+      const rangeError = validateTimeRange(formData.startTime, time);
+      if (rangeError) {
+        setErrors(prev => ({ ...prev, endTime: rangeError }));
+      }
+    }
+  };
+
+  // Cargar entry_id del evento
   useEffect(() => {
     if (!id) return;
-    (async () => {
+    
+    const loadEntryId = async () => {
       try {
         const res = await fetch(`${BASE_URL}/data/events/all?format=json`);
         const { data } = (await res.json()) as { data: RawRow<RawEvent>[] };
         const row = data.find(r => String(r.data.id) === id);
-        if (row) setEntryId(row.entry_id);
+        if (row) {
+          setEntryId(row.entry_id);
+          console.log('✅ Entry ID encontrado:', row.entry_id);
+        }
       } catch (e) {
-        console.error('entry_id error:', e);
+        console.error('❌ Error cargando entry_id:', e);
       }
-    })();
+    };
+    
+    loadEntryId();
   }, [id]);
 
-  /* ---------- cargar datos iniciales ---------- */
+  // Cargar tracks, speakers y relaciones
   useEffect(() => {
     if (!id) return;
 
     const loadData = async () => {
       try {
-        console.log('🔄 Loading speakers and tracks...');
-        
-        // Cargar speakers
-        const speakersRes = await fetch(`${BASE_URL}/data/speakers/all?format=json&t=${Date.now()}`);
-        const speakersData = await speakersRes.json();
-        console.log('👥 Speakers response:', speakersData);
-        
-        if (speakersData?.data) {
-          const speakers: SpeakerOption[] = speakersData.data.map((entry: any) => ({
-            id: String(entry.data.id),
-            name: entry.data.name
-          }));
-          setSpeakerOptions(speakers);
-          console.log('✅ Loaded speakers:', speakers.length);
-        }
+        console.log('📊 Cargando datos para evento:', id);
 
         // Cargar tracks
-        const tracksRes = await fetch(`${BASE_URL}/data/tracks/all?format=json&t=${Date.now()}`);
-        const tracksData = await tracksRes.json();
-        console.log('🏷️ Tracks response:', tracksData);
-        
-        if (tracksData?.data) {
-          const tracks: string[] = [];
-          const nameToId: Record<string, number> = {};
-          tracksData.data.forEach((entry: any) => {
-            tracks.push(entry.data.nombre);
-            nameToId[entry.data.nombre] = entry.data.id;
-          });
-          setAllTracks(tracks);
-          setTrackNameToId(nameToId);
-          console.log('✅ Loaded tracks:', tracks.length);
-        }
+        const resT = await fetch(`${BASE_URL}/data/tracks/all?format=json`);
+        const { data: rawT } = (await resT.json()) as { data: RawRow<RawTrack>[] };
+        const map: Record<string, number> = {};
+        const names: string[] = [];
+        rawT.forEach(r => {
+          map[r.data.nombre] = r.data.id;
+          names.push(r.data.nombre);
+        });
+        setTrackNameToId(map);
+        setAllTracks(names);
 
-        // Cargar datos del evento específico
-        const eventRes = await fetch(`${BASE_URL}/data/events/all?format=json`);
-        const { data: eventData } = (await eventRes.json()) as { data: RawRow<RawEvent>[] };
-        const eventRow = eventData.find(r => String(r.data.id) === id);
-        
-        if (eventRow) {
-          const eventInfo = eventRow.data;
-          console.log('📄 Loading event data:', eventInfo);
+        // Cargar tracks seleccionados para este evento
+        const resET = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`);
+        const { data: rawET } = (await resET.json()) as { data: RawRow<RawEventTrack>[] };
+        const trackIds = rawET
+          .filter(r => String(r.data.event_id) === id)
+          .map(r => r.data.track_id);
+        const trackNames = trackIds
+          .map(tid => names.find(n => map[n] === tid))
+          .filter((n): n is string => !!n);
+        setSelectedTracks(trackNames);
+
+        // Cargar speakers
+        const resS = await fetch(`${BASE_URL}/data/speakers/all?format=json`);
+        const { data: rawS } = (await resS.json()) as { data: RawRow<{ id: number; name: string }>[] };
+        const opts: SpeakerOption[] = rawS.map(r => ({
+          id: String(r.data.id),
+          name: r.data.name,
+        }));
+        setSpeakerOptions(opts);
+
+        // Cargar datos específicos del evento
+        const rowEvResponse = await fetch(`${BASE_URL}/data/events/all?format=json`);
+        const { data: allRows } = (await rowEvResponse.json()) as { data: RawRow<RawEvent>[] };
+        const rawEv = allRows.find(r => String(r.data.id) === id)?.data;
+
+        if (rawEv) {
+          setMainSpeakerName(rawEv.ponente || '');
+          if (rawEv.invitados_especiales && Array.isArray(rawEv.invitados_especiales)) {
+            setGuestNames(rawEv.invitados_especiales.filter(g => g != null && g.trim() !== ''));
+          }
           
-          setFormData({
-            titulo: eventInfo.titulo || '',
-            descripcion: eventInfo.descripcion || '',
-            tema: eventInfo.tema || '',
-            fecha: eventInfo.fecha || '',
-            hora_inicio: eventInfo.hora_inicio || '',
-            hora_fin: eventInfo.hora_fin || '',
-            lugar: eventInfo.lugar || '',
-            modalidad: eventInfo.modalidad || 'Presencial',
-            plataforma: eventInfo.plataforma || '',
-            max_participantes: String(eventInfo.max_participantes || ''),
-            imageUrl: eventInfo.imageUrl || '',
-          });
-          
-          setPonente(eventInfo.ponente || '');
-          setInvitadosEspeciales(Array.isArray(eventInfo.invitados_especiales) ? eventInfo.invitados_especiales : []);
+          // ✅ CARGAR DATOS DE MODALIDAD
+          setFormData(prev => ({
+            ...prev,
+            modalidad: rawEv.modalidad || 'Presencial',
+            plataforma: rawEv.plataforma || '',
+            max_participantes: String(rawEv.max_participantes || ''),
+          }));
         }
-      } catch (error) {
-        console.error('❌ Error loading initial data:', error);
+      } catch (err) {
+        console.error('❌ Error cargando datos:', err);
       }
     };
 
     loadData();
   }, [id]);
 
-  /* ---------- validaciones ---------- */
+  // Precargar datos del formulario cuando llega el evento
+  useEffect(() => {
+    if (!event) return;
+
+    let formattedDate = '';
+    try {
+      if (event.date) {
+        const parsedDate = new Date(event.date);
+        if (!isNaN(parsedDate.getTime())) {
+          formattedDate = parsedDate.toISOString().split('T')[0];
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ Error parseando fecha:', event.date);
+    }
+
+    const [startTime, endTime] = (event.time || '').split(' - ');
+
+    setFormData(prev => ({
+      ...prev,
+      name: event.name || '',
+      description: event.description || '',
+      date: formattedDate,
+      startTime: startTime?.trim() || '',
+      endTime: endTime?.trim() || '',
+      location: event.location || '',
+      imageUrl: event.imageUrl || '',
+    }));
+  }, [event]);
+
+  const toggleTrack = (track: string) => {
+    setSelectedTracks(prev =>
+      prev.includes(track) ? prev.filter(t => t !== track) : [...prev, track]
+    );
+  };
+
+  const toggleGuest = (name: string) => {
+    if (!name || !name.trim()) return;
+    setGuestNames(prev =>
+      prev.includes(name) ? prev.filter(g => g !== name) : [...prev, name]
+    );
+    if (mainSpeakerName === name) {
+      setMainSpeakerName('');
+    }
+  };
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     
-    if (!formData.titulo.trim()) newErrors.titulo = 'El título del evento es requerido';
-    if (!formData.descripcion.trim()) newErrors.descripcion = 'La descripción es requerida';
-    if (!formData.tema.trim()) newErrors.tema = 'La categoría es requerida';
-    if (!formData.modalidad) newErrors.modalidad = 'La modalidad es requerida';
-    if (!ponente.trim()) newErrors.ponente = 'El ponente principal es requerido';
-    if (!formData.max_participantes.trim()) newErrors.max_participantes = 'El máximo de participantes es requerido';
-    if (!formData.imageUrl.trim()) newErrors.imageUrl = 'La imagen es requerida';
+    if (!formData.name?.trim()) newErrors.name = 'Event name is required';
+    if (!formData.description?.trim()) newErrors.description = 'Description is required';
+    if (!formData.modalidad) newErrors.modalidad = 'Modality is required';
+    if (!mainSpeakerName?.trim()) newErrors.mainSpeaker = 'Select main speaker';
+    if (!formData.imageUrl?.trim()) newErrors.imageUrl = 'Image URL is required';
+    if (selectedTracks.length === 0) newErrors.tracks = 'Select at least one track';
     
     // Validaciones específicas por modalidad
     if (formData.modalidad === 'Virtual' && !formData.plataforma.trim()) {
-      newErrors.plataforma = 'La plataforma es requerida para eventos virtuales';
+      newErrors.plataforma = 'Platform is required for virtual events';
     }
-    if ((formData.modalidad === 'Presencial' || formData.modalidad === 'Hibrida') && !formData.lugar.trim()) {
-      newErrors.lugar = 'La ubicación es requerida para eventos presenciales';
+    if ((formData.modalidad === 'Presencial' || formData.modalidad === 'Hibrida') && !formData.location?.trim()) {
+      newErrors.location = 'Location is required for in-person events';
     }
     
-    // Validaciones mejoradas de fecha y hora
-    const dateError = validateDate(formData.fecha);
-    if (dateError) newErrors.fecha = dateError;
+    // ✅ VALIDACIONES MEJORADAS DE FECHA Y HORA
+    const dateError = validateDate(formData.date);
+    if (dateError) newErrors.date = dateError;
     
-    const startTimeError = validateTime(formData.hora_inicio);
-    if (startTimeError) newErrors.hora_inicio = startTimeError;
+    const startTimeError = validateTime(formData.startTime);
+    if (startTimeError) newErrors.startTime = startTimeError;
     
-    const endTimeError = validateTime(formData.hora_fin);
-    if (endTimeError) newErrors.hora_fin = endTimeError;
+    const endTimeError = validateTime(formData.endTime);
+    if (endTimeError) newErrors.endTime = endTimeError;
     
-    // Validar rango de tiempo solo si ambas horas son válidas
     if (!startTimeError && !endTimeError) {
-      const timeRangeError = validateTimeRange(formData.hora_inicio, formData.hora_fin);
-      if (timeRangeError) newErrors.hora_fin = timeRangeError;
-    }
-    
-    // Validar número de participantes
-    const maxParticipants = parseInt(formData.max_participantes);
-    if (isNaN(maxParticipants) || maxParticipants <= 0) {
-      newErrors.max_participantes = 'El máximo de participantes debe ser un número positivo';
-    } else if (maxParticipants > 10000) {
-      newErrors.max_participantes = 'El máximo de participantes no puede exceder 10,000';
+      const timeRangeError = validateTimeRange(formData.startTime, formData.endTime);
+      if (timeRangeError) newErrors.endTime = timeRangeError;
     }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  /* ---------- helpers ---------- */
-  const handleSpeakerSelect = (name: string) => {
-    setPonente(name);
-    // Si estaba en invitados, quitarlo
-    if (invitadosEspeciales.includes(name)) {
-      setInvitadosEspeciales(prev => prev.filter(g => g !== name));
-    }
-  };
-
-  const toggleGuest = (name: string) => {
-    if (!name) return;
-    setInvitadosEspeciales(prev =>
-      prev.includes(name) ? prev.filter(g => g !== name) : [...prev, name]
-    );
-    if (ponente === name) {
-      setPonente('');
-    }
-  };
-
-  /* ---------- actualizar evento ---------- */
   const handleSubmit = async () => {
-    console.log('🚀 Save changes button pressed');
-    
     if (!validateForm() || !entryId) {
-      console.log('❌ Form validation failed or no entry ID');
+      if (!entryId) {
+        Alert.alert('Error', 'Event entry ID not found. Please try again.');
+      }
       return;
     }
     
     setIsSubmitting(true);
-    console.log('📝 Starting event update...');
     
     try {
-      // 1. Obtener datos originales del evento
       const resAll = await fetch(`${BASE_URL}/data/events/all?format=json`);
       const { data } = (await resAll.json()) as { data: RawRow<RawEvent>[] };
-      const originalRow = data.find(r => r.entry_id === entryId);
-      if (!originalRow) throw new Error('Original event not found');
+      const row = data.find(r => r.entry_id === entryId);
+      if (!row) {
+        throw new Error('Original event not found');
+      }
 
-      console.log('📄 Original event data:', originalRow.data);
-
-      // 2. Preparar datos actualizados del evento
-      const eventData = {
-        ...originalRow.data,
-        titulo: formData.titulo.trim(),
-        descripcion: formData.descripcion.trim(),
-        tema: formData.tema.trim(),
-        ponente: ponente.trim(),
-        invitados_especiales: invitadosEspeciales.filter(g => g.trim()),
-        modalidad: formData.modalidad,
-        lugar: formData.modalidad === 'Virtual' ? null : formData.lugar.trim(),
-        plataforma: formData.modalidad === 'Virtual' ? formData.plataforma.trim() : null,
-        fecha: formData.fecha,
-        hora_inicio: formData.hora_inicio,
-        hora_fin: formData.hora_fin,
-        max_participantes: parseInt(formData.max_participantes),
-        imageUrl: formData.imageUrl
+      const payload = {
+        data: {
+          ...row.data,
+          titulo: formData.name.trim(),
+          descripcion: formData.description.trim(),
+          fecha: formData.date.trim(),
+          hora_inicio: formData.startTime.trim(),
+          hora_fin: formData.endTime.trim(),
+          lugar: formData.modalidad === 'Virtual' ? '' : formData.location?.trim() || '',
+          modalidad: formData.modalidad,
+          plataforma: formData.modalidad === 'Virtual' ? formData.plataforma.trim() : '',
+          max_participantes: parseInt(formData.max_participantes) || row.data.max_participantes,
+          imageUrl: formData.imageUrl.trim(),
+          ponente: mainSpeakerName.trim() || null,
+          invitados_especiales: guestNames.filter(g => g && g.trim() !== ''),
+        },
       };
 
-      console.log('📤 Sending updated event data:', eventData);
-
-      // 3. Actualizar el evento en la base de datos
-      const eventResponse = await fetch(`${BASE_URL}/data/events/update/${entryId}`, {
+      const putRes = await fetch(`${BASE_URL}/data/events/update/${entryId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
-        },
-        body: JSON.stringify({
-          data: eventData
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
-      console.log('📡 Event update response status:', eventResponse.status);
-
-      if (!eventResponse.ok) {
-        const errorText = await eventResponse.text();
-        console.error('❌ Event update failed:', errorText);
-        throw new Error(`Failed to update event: ${eventResponse.status} - ${errorText}`);
+      if (!putRes.ok) {
+        const errorText = await putRes.text();
+        throw new Error(`Failed to update event: ${putRes.status}`);
       }
 
-      const eventResult = await eventResponse.json();
-      console.log('✅ Event updated successfully:', eventResult);
-
-      // 4. Actualizar relación event_tracks si cambió la categoría
-      if (formData.tema && originalRow.data.tema !== formData.tema) {
-        console.log('🏷️ Category changed, updating track relationship...');
-        
-        try {
-          // 4.1. Eliminar relación anterior
-          console.log('🗑️ Removing old track relationship...');
-          const relRes = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`);
-          const { data: relRows } = (await relRes.json()) as { data: RawRow<RawEventTrack>[] };
-          const oldRows = relRows.filter(r => String(r.data.event_id) === id);
-          
-          for (const r of oldRows) {
-            await fetch(`${BASE_URL}/data/event_tracks/delete/${r.entry_id}`, { 
-              method: 'DELETE' 
-            });
-          }
-          console.log(`✅ Removed ${oldRows.length} old track relationships`);
-
-          // 4.2. Crear nueva relación
-          const trackId = trackNameToId[formData.tema];
-          if (trackId) {
-            console.log(`📌 Creating new track relation: event ${id} -> track ${trackId} (${formData.tema})`);
-            
-            const trackResponse = await fetch(`${BASE_URL}/data/store`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                table_name: 'event_tracks',
-                data: {
-                  event_id: parseInt(id),
-                  track_id: trackId
-                }
-              }),
-            });
-
-            if (!trackResponse.ok) {
-              console.warn(`⚠️ Failed to create new track relationship for ${formData.tema}`);
-            } else {
-              console.log(`✅ New track relationship created for ${formData.tema}`);
-            }
-          } else {
-            console.warn(`⚠️ Track ID not found for: ${formData.tema}`);
-          }
-        } catch (trackError) {
-          console.warn('⚠️ Error updating track relationship:', trackError);
-          // No interrumpir el flujo principal por este error
-        }
-      } else if (formData.tema && originalRow.data.tema === formData.tema) {
-        console.log('📝 Category unchanged, keeping existing track relationship');
-      }
-
-      // 5. Mostrar mensaje de éxito
-      const successMessage = `Evento "${formData.titulo}" actualizado exitosamente!`;
-      console.log('🎉', successMessage);
+      // Sincronizar tracks
+      const relRes = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`);
+      const { data: relRows } = (await relRes.json()) as { data: RawRow<RawEventTrack>[] };
+      const oldRows = relRows.filter(r => String(r.data.event_id) === id);
       
+      for (const r of oldRows) {
+        await fetch(`${BASE_URL}/data/event_tracks/delete/${r.entry_id}`, { method: 'DELETE' });
+      }
+      
+      for (const trkName of selectedTracks) {
+        const trkId = trackNameToId[trkName];
+        if (!trkId) continue;
+        await fetch(`${BASE_URL}/data/store`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            table_name: 'event_tracks',
+            data: { event_id: Number(id), track_id: trkId },
+          }),
+        });
+      }
+
       if (Platform.OS === 'web') {
-        window.alert(successMessage);
+        alert('Event updated successfully!');
       } else {
-        Alert.alert('Éxito', successMessage);
+        Alert.alert('Success', 'Event updated successfully!');
       }
-      
-      // 6. Navegar de vuelta
-      console.log('🔄 Redirecting back...');
+
       router.back();
       
-    } catch (error) {
-      console.error('❌ Error updating event:', error);
-      
-      const errorMessage = error instanceof Error 
-        ? `Error: ${error.message}` 
-        : 'Error al actualizar el evento. Por favor intenta de nuevo.';
-      
-      setErrors({ submit: errorMessage });
+    } catch (err) {
+      console.error('❌ Error en envío:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update event';
       
       if (Platform.OS === 'web') {
-        window.alert(errorMessage);
+        alert(`Error: ${errorMessage}`);
       } else {
         Alert.alert('Error', errorMessage);
       }
     } finally {
       setIsSubmitting(false);
-      console.log('🔚 Event update process finished');
     }
   };
 
-  /* ---------- eliminar ---------- */
   const confirmDelete = () => {
     const message = 'Are you sure you want to delete this event and all its relations?';
     
@@ -550,143 +491,132 @@ export default function EditEventScreen() {
   const handleDelete = async () => {
     if (!entryId) return;
     setIsDeleting(true);
+    
     try {
-      // borrar event_tracks
       const rel = await fetch(`${BASE_URL}/data/event_tracks/all?format=json`);
       const { data: rT } = (await rel.json()) as { data: RawRow<RawEventTrack>[] };
       for (const r of rT.filter(r => String(r.data.event_id) === id)) {
         await fetch(`${BASE_URL}/data/event_tracks/delete/${r.entry_id}`, { method: 'DELETE' });
       }
-      // borrar event_speakers
-      const relS = await fetch(`${BASE_URL}/data/event_speakers/all?format=json`);
-      const { data: rS } = (await relS.json()) as { data: RawRow<RawEventSpeaker>[] };
-      for (const r of rS.filter(r => String(r.data.event_id) === id)) {
-        await fetch(`${BASE_URL}/data/event_speakers/delete/${r.entry_id}`, { method: 'DELETE' });
-      }
-      // borrar evento
+      
       const del = await fetch(`${BASE_URL}/data/events/delete/${entryId}`, { method: 'DELETE' });
-      if (!del.ok) throw new Error('delete failed');
+      if (!del.ok) throw new Error('Delete failed');
 
       router.back();
     } catch (err) {
-      console.error('delete error:', err);
-      Alert.alert('Error', 'Error al eliminar el evento.');
+      Alert.alert('Error', 'Failed to delete event.');
     } finally {
       setIsDeleting(false);
     }
   };
 
-  /* ---------- loading / error ---------- */
-  if (loadingEvent)
+  if (loadingEvent) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
         <ActivityIndicator size="large" color="#0A84FF" />
+        <Text style={[styles.errorText, { color: isDark ? '#FFF' : '#000', fontSize: 16 }]}>
+          Loading event...
+        </Text>
       </View>
     );
+  }
 
-  if (!event)
+  if (!event) {
     return (
       <View style={[styles.errorContainer, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
-        <Text style={[styles.errorText, { color: isDark ? '#FFF' : '#000' }]}>
-          Evento no encontrado
+        <Text style={[styles.errorText, { color: isDark ? '#FFF' : '#000', fontSize: 18 }]}>
+          Event not found
         </Text>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>Volver</Text>
+          <Text style={styles.backButtonText}>Go Back</Text>
         </Pressable>
       </View>
     );
+  }
 
-  /* ---------- render ---------- */
   return (
     <ScrollView style={[styles.container, { backgroundColor: isDark ? '#000' : '#F2F2F7' }]}>
       <View style={[styles.formContainer, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}>
         
-        {/* Image Upload */}
         <ImagePickerField
-          imageUrl={formData.imageUrl || ''}
-          onImageChange={uri => setFormData(p => ({ ...p, imageUrl: uri || '' }))}
+          imageUrl={formData.imageUrl}
+          onImageChange={uri => setFormData(p => ({ ...p, imageUrl: uri }))}
         />
 
-        {/* Event Title */}
         <TextField
-          label="Título del Evento *"
-          value={formData.titulo || ''}
-          placeholder="Ingresa el título del evento"
-          onChange={text => setFormData(p => ({ ...p, titulo: text || '' }))}
-          error={errors.titulo}
+          label="Event Name *"
+          value={formData.name}
+          placeholder="Enter event name"
+          onChange={text => setFormData(p => ({ ...p, name: text }))}
+          error={errors.name}
         />
 
-        {/* Description */}
         <TextAreaField
-          label="Descripción *"
-          value={formData.descripcion || ''}
-          placeholder="Ingresa la descripción del evento"
-          onChange={text => setFormData(p => ({ ...p, descripcion: text || '' }))}
-          error={errors.descripcion}
+          label="Description *"
+          value={formData.description}
+          placeholder="Enter event description"
+          onChange={text => setFormData(p => ({ ...p, description: text }))}
+          error={errors.description}
         />
 
-        {/* Category - Using tracks from database */}
         <View style={styles.inputContainer}>
-          <Text style={[styles.label, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-            Categoría *
+          <Text style={[styles.label, { color: isDark ? '#FFF' : '#000' }]}>
+            Tracks *
           </Text>
-          {allTracks.length === 0 ? (
-            <View style={[styles.categoryContainer, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
-              <ActivityIndicator size="small" color={isDark ? '#FFFFFF' : '#000000'} />
-              <Text style={[{ color: isDark ? '#FFFFFF' : '#000000', marginTop: 8 }]}>
-                Cargando categorías...
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.categoryContainer}>
-              {allTracks.map(track => (
+          <View style={styles.categoryContainer}>
+            {allTracks.map((track, index) => {
+              const isSelected = selectedTracks.includes(track);
+              return (
                 <Pressable
-                  key={track}
+                  key={`track-${track}-${index}`}
                   style={[
                     styles.categoryChip,
-                    { 
-                      backgroundColor: formData.tema === track 
-                        ? '#0A84FF' 
-                        : isDark ? '#2C2C2E' : '#F2F2F7'
-                    }
+                    {
+                      backgroundColor: isSelected
+                        ? '#0A84FF'
+                        : isDark
+                        ? '#2C2C2E'
+                        : '#F2F2F7',
+                    },
                   ]}
-                  onPress={() => setFormData(prev => ({ ...prev, tema: track }))}
+                  onPress={() => toggleTrack(track)}
                 >
-                  <Text style={[
-                    styles.categoryChipText,
-                    { 
-                      color: formData.tema === track 
-                        ? '#FFFFFF' 
-                        : isDark ? '#FFFFFF' : '#000000'
-                    }
-                  ]}>
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      { color: isSelected ? '#FFF' : isDark ? '#FFF' : '#000' },
+                    ]}
+                  >
                     {track}
                   </Text>
                 </Pressable>
-              ))}
-            </View>
-          )}
-          {errors.tema && <Text style={styles.errorText}>{errors.tema}</Text>}
+              );
+            })}
+          </View>
+          {errors.tracks && <Text style={styles.errorText}>{errors.tracks}</Text>}
         </View>
 
-        {/* Main Speaker */}
         <SpeakerPicker
-          label="Ponente Principal *"
+          label="Main Speaker *"
           options={speakerOptions}
-          selected={ponente}
-          onSelect={handleSpeakerSelect}
-          error={errors.ponente}
+          selected={mainSpeakerName}
+          onSelect={name => {
+            setMainSpeakerName(name);
+            if (guestNames.includes(name)) {
+              toggleGuest(name);
+            }
+          }}
+          error={errors.mainSpeaker}
         />
 
-        {/* Special Guests */}
         <MultiSpeakerPicker
-          label="Invitados Especiales"
-          options={speakerOptions.filter(s => s.name !== ponente)}
-          selected={invitadosEspeciales}
+          label="Special Guests"
+          options={speakerOptions.filter(s => s.name !== mainSpeakerName)}
+          selected={guestNames}
           onSelect={toggleGuest}
         />
 
-        {/* Modality */}
+        {/* ✅ MODALIDAD CON VALIDACIONES */}
         <View style={styles.inputContainer}>
           <Text style={[styles.label, { color: isDark ? '#FFFFFF' : '#000000' }]}>
             Modalidad *
@@ -721,31 +651,28 @@ export default function EditEventScreen() {
           {errors.modalidad && <Text style={styles.errorText}>{errors.modalidad}</Text>}
         </View>
 
-        {/* Platform (only for Virtual events) */}
         {formData.modalidad === 'Virtual' && (
           <PlatformField
             value={formData.plataforma}
-            onChange={(text) => setFormData(prev => ({ ...prev, plataforma: text }))}
+            onChange={text => setFormData(p => ({ ...p, plataforma: text }))}
             error={errors.plataforma}
           />
         )}
 
-        {/* Location (for Presencial and Hibrida) */}
         {(formData.modalidad === 'Presencial' || formData.modalidad === 'Hibrida') && (
           <LocationField
-            value={formData.lugar}
-            onChange={(text) => setFormData(prev => ({ ...prev, lugar: text }))}
-            error={errors.lugar}
+            value={formData.location}
+            onChange={text => setFormData(p => ({ ...p, location: text }))}
+            error={errors.location}
           />
         )}
 
-        {/* Date and Time with improved UX */}
+        {/* ✅ DATE AND TIME WITH ENHANCED VALIDATIONS */}
         <DatePickerField
           label="Fecha del Evento *"
           value={formData.date}
-          onChange={(date) => setFormData(p => ({ ...p, date }))}
+          onChange={d => setFormData(p => ({ ...p, date: d }))}
           error={errors.date}
-          minimumDate={new Date()} // No permitir fechas pasadas
         />
 
         <View style={styles.timeFieldsContainer || { flexDirection: 'row', gap: 16 }}>
@@ -753,7 +680,7 @@ export default function EditEventScreen() {
             <TimePickerField
               label="Hora de Inicio *"
               value={formData.startTime}
-              onChange={(time) => setFormData(p => ({ ...p, startTime: time }))}
+              onChange={handleStartTimeChange} // ✅ Validación en tiempo real
               error={errors.startTime}
             />
           </View>
@@ -761,30 +688,22 @@ export default function EditEventScreen() {
             <TimePickerField
               label="Hora de Fin *"
               value={formData.endTime}
-              onChange={(time) => setFormData(p => ({ ...p, endTime: time }))}
+              onChange={handleEndTimeChange} // ✅ Validación en tiempo real
               error={errors.endTime}
             />
           </View>
         </View>
 
-        {/* Max Participants */}
         <TextField
-          label="Máximo de Participantes *"
+          label="Max Participants"
           value={formData.max_participantes}
-          placeholder="Ingresa el número máximo de participantes"
-          onChange={(text) => setFormData(prev => ({ ...prev, max_participantes: text }))}
-          error={errors.max_participantes}
+          placeholder="Enter max participants"
+          onChange={text => setFormData(p => ({ ...p, max_participantes: text }))}
           keyboardType="numeric"
         />
 
-        {/* Submit Error */}
-        {errors.submit && (
-          <Text style={[styles.errorText, styles.submitError]}>
-            {errors.submit}
-          </Text>
-        )}
+        {errors.submit && <Text style={[styles.errorText, styles.submitError]}>{errors.submit}</Text>}
 
-        {/* Submit and Delete Buttons */}
         <SubmitDeleteButtons
           isSubmitting={isSubmitting}
           isDeleting={isDeleting}
