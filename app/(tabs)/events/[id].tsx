@@ -24,6 +24,7 @@ import { TimePickerField } from '@/components/events/edit/TimePickerField';
 import { SubmitDeleteButtons } from '@/components/events/edit/SubmitDeleteButtons';
 import { SpeakerPicker } from '@/components/events/edit/SpeakerPicker';
 import { MultiSpeakerPicker } from '@/components/events/edit/MultiSpeakerPicker';
+import { CapacityField } from '@/components/events/edit/CapacityField';
 
 const {
   UNIDB_BASE_URL,
@@ -73,6 +74,10 @@ export default function EditEventScreen() {
   const [mainSpeakerName, setMainSpeakerName] = useState<string>('');
   const [guestNames, setGuestNames] = useState<string[]>([]);
 
+  // Estado para la capacidad en tiempo real
+  const [currentSubscribers, setCurrentSubscribers] = useState<number>(0);
+  const [isLoadingCapacity, setIsLoadingCapacity] = useState(false);
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -91,6 +96,40 @@ export default function EditEventScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const modalityOptions: ModalityType[] = ['Presencial', 'Virtual', 'Hibrida'];
+
+  // ✅ FUNCIÓN PARA CARGAR SUSCRIPTORES EN TIEMPO REAL
+  const loadCurrentSubscribers = async () => {
+    if (!id) return;
+    
+    setIsLoadingCapacity(true);
+    try {
+      const response = await fetch(`${BASE_URL}/data/events/all?format=json`);
+      const { data } = (await response.json()) as { data: RawRow<RawEvent>[] };
+      const eventData = data.find(r => String(r.data.id) === id);
+      
+      if (eventData) {
+        setCurrentSubscribers(eventData.data.suscritos || 0);
+        console.log('✅ Suscriptores actualizados:', eventData.data.suscritos);
+      }
+    } catch (error) {
+      console.error('❌ Error cargando suscriptores:', error);
+    } finally {
+      setIsLoadingCapacity(false);
+    }
+  };
+
+  // ✅ EFECTO PARA CARGAR SUSCRIPTORES PERIÓDICAMENTE
+  useEffect(() => {
+    if (!id) return;
+
+    // Cargar inmediatamente
+    loadCurrentSubscribers();
+
+    // Actualizar cada 30 segundos
+    const interval = setInterval(loadCurrentSubscribers, 30000);
+
+    return () => clearInterval(interval);
+  }, [id]);
 
   // ✅ MISMAS VALIDACIONES QUE EN CREATE
   const validateDate = (date: string): string | null => {
@@ -279,13 +318,16 @@ export default function EditEventScreen() {
             setGuestNames(rawEv.invitados_especiales.filter(g => g != null && g.trim() !== ''));
           }
           
-          // ✅ CARGAR DATOS DE MODALIDAD
+          // ✅ CARGAR DATOS DE MODALIDAD Y SUSCRIPTORES
           setFormData(prev => ({
             ...prev,
             modalidad: rawEv.modalidad || 'Presencial',
             plataforma: rawEv.plataforma || '',
             max_participantes: String(rawEv.max_participantes || ''),
           }));
+          
+          // Establecer suscriptores actuales
+          setCurrentSubscribers(rawEv.suscritos || 0);
         }
       } catch (err) {
         console.error('❌ Error cargando datos:', err);
@@ -411,6 +453,8 @@ export default function EditEventScreen() {
           imageUrl: formData.imageUrl.trim(),
           ponente: mainSpeakerName.trim() || null,
           invitados_especiales: guestNames.filter(g => g && g.trim() !== ''),
+          // Mantener el número actual de suscritos
+          suscritos: currentSubscribers,
         },
       };
 
@@ -680,7 +724,7 @@ export default function EditEventScreen() {
             <TimePickerField
               label="Hora de Inicio *"
               value={formData.startTime}
-              onChange={handleStartTimeChange} // ✅ Validación en tiempo real
+              onChange={handleStartTimeChange}
               error={errors.startTime}
             />
           </View>
@@ -688,18 +732,19 @@ export default function EditEventScreen() {
             <TimePickerField
               label="Hora de Fin *"
               value={formData.endTime}
-              onChange={handleEndTimeChange} // ✅ Validación en tiempo real
+              onChange={handleEndTimeChange}
               error={errors.endTime}
             />
           </View>
         </View>
 
-        <TextField
-          label="Max Participants"
-          value={formData.max_participantes}
-          placeholder="Enter max participants"
-          onChange={text => setFormData(p => ({ ...p, max_participantes: text }))}
-          keyboardType="numeric"
+        {/* ✅ CAMPO DE CAPACIDAD CON INFORMACIÓN EN TIEMPO REAL */}
+        <CapacityField
+          currentSubscribers={currentSubscribers}
+          maxParticipants={formData.max_participantes}
+          onMaxParticipantsChange={text => setFormData(p => ({ ...p, max_participantes: text }))}
+          onRefresh={loadCurrentSubscribers}
+          isLoading={isLoadingCapacity}
         />
 
         {errors.submit && <Text style={[styles.errorText, styles.submitError]}>{errors.submit}</Text>}

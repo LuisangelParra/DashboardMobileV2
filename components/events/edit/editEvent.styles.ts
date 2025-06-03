@@ -11,6 +11,7 @@ export default StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   errorContainer: {
     flex: 1,
@@ -24,351 +25,152 @@ export default StyleSheet.create({
     marginTop: 4,
   },
   backButton: {
+    marginTop: 20,
     padding: 12,
     backgroundColor: '#0A84FF',
     borderRadius: 8,
   },
   backButtonText: {
-    color: '#FFFFFF',
+    color: '#FFF',
+    fontSize: 16,
     fontWeight: '600',
   },
   formContainer: {
+    padding: 20,
+    margin: 16,
     borderRadius: 12,
-    padding: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  
-  // Imagen
-  imagePreviewContainer: {
-    height: 200,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 16,
-    position: 'relative',
-  },
-  imagePreview: {
-    width: '100%',
-    height: '100%',
-  },
-  removeImageButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imageUploadButton: {
-    height: 200,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  imageUploadText: {
-    marginTop: 8,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  
-  // Inputs generales
   inputContainer: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   label: {
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 8,
   },
-  
-  // Input simple (TextField)
-  textFieldInput: {
-    height: 44,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 16,
-    borderWidth: 1,
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-      },
-    }),
-  },
-  
-  // TextArea
-  textAreaInput: {
-    minHeight: 100,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-    borderWidth: 1,
-    textAlignVertical: 'top',
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-        fontFamily: 'system-ui',
-      },
-    }),
-  },
-  
-  // Input con ícono (para fecha, hora, ubicación)
-  iconInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    height: 44,
+  sublabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 6,
   },
   input: {
-    height: 44,
+    borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     fontSize: 16,
-    flex: 1,
-    marginLeft: 0,
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-      },
-    }),
+    minHeight: 44,
   },
-  
-  // Categorías/Chips
+  textArea: {
+    minHeight: 100,
+    textAlignVertical: 'top',
+    paddingTop: 12,
+  },
   categoryContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    marginTop: 8,
   },
   categoryChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   categoryChipText: {
     fontSize: 14,
     fontWeight: '500',
   },
-  
-  // Layout
-  row: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  flex1: {
-    flex: 1,
-  },
-  
-  // DateTime específico
-  dateTimeGroupContainer: {
-    marginBottom: 16,
-  },
-  timeContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-  },
-  timeFieldWrapper: {
-    flex: 1,
-    minWidth: 140,
-  },
-  
-  // Dropdown (para speakers)
-  dropdownInput: {
-    borderRadius: 8,
-    justifyContent: 'center',
-    height: 44,
-    marginBottom: 0,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#CCC',
-  },
-  dropdownListContainer: {
-    maxHeight: 160,
-    borderRadius: 8,
-    marginTop: 4,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#CCC',
-  },
-  dropdownItem: {
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  
-  // Tags (invitados)
-  tagContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8,
-  },
-  tag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  
-  // Botones de acción
   submitError: {
     textAlign: 'center',
     marginBottom: 16,
-    color: '#FF453A',
-  },
-  submitButton: {
-    backgroundColor: '#0A84FF',
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  deleteButton: {
-    backgroundColor: '#FF3B30',
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  
-  // Contenedores legacy (para compatibilidad)
-  textFieldContainer: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#CCC',
-    height: 44,
-    justifyContent: 'center',
-  },
-  textAreaContainer: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#CCC',
-    justifyContent: 'center',
-  },
-  textArea: {
-    height: 100,
-    paddingTop: 12,
-    paddingBottom: 12,
-    textAlignVertical: 'top',
-    ...Platform.select({
-      web: {
-        outlineWidth: 0,
-      },
-    }),
   },
   timeFieldsContainer: {
     flexDirection: 'row',
-    marginBottom: 16,
-  },
-  submitButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    gap: 16,
   },
 
-  // Date/Time Picker buttons (móvil)
-  datePickerButton: {
+  // ✅ NUEVOS ESTILOS PARA CAPACIDAD
+  capacityHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    height: 44,
+    marginBottom: 12,
+  },
+  refreshButton: {
     paddingHorizontal: 12,
-    borderRadius: 8,
-    ...Platform.select({
-      web: {
-        cursor: 'pointer',
-      },
-    }),
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(10, 132, 255, 0.1)',
   },
-  datePickerText: {
-    fontSize: 16,
-    flex: 1,
-  },
-  timePickerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 44,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    ...Platform.select({
-      web: {
-        cursor: 'pointer',
-      },
-    }),
-  },
-  timePickerText: {
-    fontSize: 16,
-    flex: 1,
-  },
-  
-  // Web-specific styles
-  webDatePickerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 44,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  webDateInput: {
-    flex: 1,
-    fontSize: 16,
-    marginLeft: 8,
-    height: 44,
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-        border: 'none',
-      },
-    }),
-  },
-  webTimePickerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 44,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  webTimeInput: {
-    flex: 1,
-    fontSize: 16,
-    marginLeft: 8,
-    height: 44,
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-        border: 'none',
-      },
-    }),
-  },
-  dateDisplayText: {
+  refreshButtonText: {
+    color: '#0A84FF',
     fontSize: 12,
-    marginTop: 4,
-    fontStyle: 'italic',
+    fontWeight: '600',
   },
-  timeDisplayText: {
+  capacityIndicator: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  capacityInfo: {
+    marginBottom: 12,
+  },
+  capacityNumbers: {
+    fontSize: 18,
+    marginBottom: 4,
+  },
+  capacityStatus: {
     fontSize: 12,
-    marginTop: 4,
-    fontStyle: 'italic',
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
-  
+  progressBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  progressBar: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+    transition: 'width 0.3s ease',
+  },
+  percentageText: {
+    fontSize: 12,
+    fontWeight: '600',
+    minWidth: 35,
+    textAlign: 'right',
+  },
+  maxCapacityField: {
+    marginTop: 8,
+  },
+  capacityAlert: {
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  capacityAlertText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
 });
 

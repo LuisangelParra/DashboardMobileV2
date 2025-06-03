@@ -103,6 +103,9 @@ export default StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
+  capacityContainer: {
+    marginBottom: 12,
+  },
   eventMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -165,5 +168,18 @@ export default StyleSheet.create({
   emptyText: {
     fontSize: 16,
     textAlign: 'center',
+  },
+  optimisticBanner: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#007AFF',
+  },
+  optimisticText: {
+    fontWeight: '600',
+  },
+  emptySubText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 8,
+    opacity: 0.7,
   },
 });
