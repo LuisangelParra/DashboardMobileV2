@@ -101,6 +101,7 @@ export function SubscriptionsTable({ subscriptions, isLoading = false }: Subscri
       styles.container,
       { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }
     ]}>
+      {/* Header */}
       <View style={styles.header}>
         <Users size={20} color="#0A84FF" />
         <Text style={[
@@ -112,118 +113,117 @@ export function SubscriptionsTable({ subscriptions, isLoading = false }: Subscri
         <TrendingUp size={16} color="#32D74B" />
       </View>
 
-      {/* Header de tabla */}
-      <View style={[
-        styles.tableHeader,
-        { borderBottomColor: isDark ? '#48484A' : '#E5E5EA' }
-      ]}>
-        <Text style={[
-          styles.tableHeaderText,
-          { color: isDark ? '#8E8E93' : '#6C6C70', flex: 2 }
-        ]}>
-          Evento
-        </Text>
-        <Text style={[
-          styles.tableHeaderText,
-          { color: isDark ? '#8E8E93' : '#6C6C70', flex: 1, textAlign: 'center' }
-        ]}>
-          Suscriptores
-        </Text>
-        <Text style={[
-          styles.tableHeaderText,
-          { color: isDark ? '#8E8E93' : '#6C6C70', flex: 1, textAlign: 'center' }
-        ]}>
-          Estado
-        </Text>
-        <Text style={[
-          styles.tableHeaderText,
-          { color: isDark ? '#8E8E93' : '#6C6C70', flex: 0.8, textAlign: 'center' }
-        ]}>
-          Fecha
-        </Text>
-      </View>
-
-      {/* Contenido de tabla */}
-      <ScrollView style={styles.tableContent} showsVerticalScrollIndicator={false}>
-        {subscriptions.slice(0, 10).map((subscription, index) => (
+      {/* Content - Always use card layout for better mobile support */}
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled={true}
+      >
+        {subscriptions.slice(0, 8).map((subscription, index) => (
           <View
-            key={subscription.id}
+            key={`subscription-${subscription.id}-${index}`}
             style={[
-              styles.tableRow,
-              index % 2 === 0 && {
-                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'
+              styles.eventCard,
+              { 
+                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
+                borderBottomColor: isDark ? '#3A3A3C' : '#E5E5EA'
               }
             ]}
           >
-            {/* Nombre del evento */}
-            <View style={{ flex: 2 }}>
-              <Text
-                style={[
-                  styles.eventName,
-                  { color: isDark ? '#FFFFFF' : '#000000' }
-                ]}
-                numberOfLines={1}
-              >
-                {subscription.name}
-              </Text>
-              {subscription.maxParticipants > 0 && (
-                <Text style={[
-                  styles.capacityText,
-                  { color: isDark ? '#8E8E93' : '#6C6C70' }
-                ]}>
-                  Capacidad: {subscription.maxParticipants}
+            {/* Event Info Row */}
+            <View style={styles.eventInfo}>
+              <View style={styles.eventNameSection}>
+                <Text
+                  style={[
+                    styles.eventName,
+                    { color: isDark ? '#FFFFFF' : '#000000' }
+                  ]}
+                  numberOfLines={2}
+                >
+                  {subscription.name}
                 </Text>
-              )}
+                <View style={styles.dateSection}>
+                  <Calendar size={12} color={isDark ? '#8E8E93' : '#6C6C70'} />
+                  <Text style={[
+                    styles.dateText,
+                    { color: isDark ? '#8E8E93' : '#6C6C70' }
+                  ]}>
+                    {formatDate(subscription.date)}
+                  </Text>
+                </View>
+              </View>
             </View>
 
-            {/* Número de suscriptores */}
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={[
-                styles.subscribersCount,
-                { color: isDark ? '#FFFFFF' : '#000000' }
-              ]}>
-                {subscription.subscribers}
-              </Text>
-              {subscription.maxParticipants > 0 && (
+            {/* Stats Row */}
+            <View style={styles.statsRow}>
+              {/* Subscribers */}
+              <View style={styles.statItem}>
                 <Text style={[
-                  styles.percentageText,
+                  styles.statValue,
+                  { color: isDark ? '#FFFFFF' : '#000000' }
+                ]}>
+                  {subscription.subscribers}
+                </Text>
+                <Text style={[
+                  styles.statLabel,
+                  { color: isDark ? '#8E8E93' : '#6C6C70' }
+                ]}>
+                  suscritos
+                </Text>
+              </View>
+
+              {/* Capacity */}
+              <View style={styles.statItem}>
+                <Text style={[
+                  styles.statValue,
+                  { color: isDark ? '#FFFFFF' : '#000000' }
+                ]}>
+                  {subscription.maxParticipants || 'N/A'}
+                </Text>
+                <Text style={[
+                  styles.statLabel,
+                  { color: isDark ? '#8E8E93' : '#6C6C70' }
+                ]}>
+                  capacidad
+                </Text>
+              </View>
+
+              {/* Percentage */}
+              <View style={styles.statItem}>
+                <Text style={[
+                  styles.statValue,
                   { color: getStatusColor(subscription.status) }
                 ]}>
                   {subscription.occupancyRate}%
                 </Text>
-              )}
-            </View>
-
-            {/* Estado */}
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <View style={[
-                styles.statusBadge,
-                { backgroundColor: `${getStatusColor(subscription.status)}20` }
-              ]}>
                 <Text style={[
-                  styles.statusText,
-                  { color: getStatusColor(subscription.status) }
+                  styles.statLabel,
+                  { color: isDark ? '#8E8E93' : '#6C6C70' }
                 ]}>
-                  {getStatusText(subscription.status)}
+                  ocupación
                 </Text>
               </View>
-            </View>
 
-            {/* Fecha */}
-            <View style={{ flex: 0.8, alignItems: 'center' }}>
-              <Calendar size={12} color={isDark ? '#8E8E93' : '#6C6C70'} />
-              <Text style={[
-                styles.dateText,
-                { color: isDark ? '#8E8E93' : '#6C6C70' }
-              ]}>
-                {formatDate(subscription.date)}
-              </Text>
+              {/* Status */}
+              <View style={styles.statusSection}>
+                <View style={[
+                  styles.statusBadge,
+                  { backgroundColor: `${getStatusColor(subscription.status)}20` }
+                ]}>
+                  <Text style={[
+                    styles.statusText,
+                    { color: getStatusColor(subscription.status) }
+                  ]}>
+                    {getStatusText(subscription.status)}
+                  </Text>
+                </View>
+              </View>
             </View>
           </View>
         ))}
       </ScrollView>
 
-      {/* Resumen al final */}
+      {/* Summary */}
       <View style={[
         styles.summary,
         { borderTopColor: isDark ? '#48484A' : '#E5E5EA' }
@@ -250,70 +250,95 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
     maxHeight: 400,
+    minHeight: 200,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
     flex: 1,
   },
-  tableHeader: {
-    flexDirection: 'row',
+  content: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  eventCard: {
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
+    marginVertical: 4,
+    borderRadius: 8,
     borderBottomWidth: 1,
   },
-  tableHeaderText: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  eventInfo: {
+    marginBottom: 8,
   },
-  tableContent: {
-    flex: 1,
-  },
-  tableRow: {
+  eventNameSection: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    minHeight: 60,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
   eventName: {
     fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  capacityText: {
-    fontSize: 11,
-  },
-  subscribersCount: {
-    fontSize: 16,
     fontWeight: '600',
-    marginBottom: 2,
+    flex: 1,
+    marginRight: 12,
+    lineHeight: 18,
   },
-  percentageText: {
+  dateSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  dateText: {
     fontSize: 11,
     fontWeight: '500',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 4,
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  statusSection: {
+    flex: 1,
+    alignItems: 'center',
   },
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 10,
+    minWidth: 60,
+    alignItems: 'center',
   },
   statusText: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 9,
+    fontWeight: '700',
     textTransform: 'uppercase',
-  },
-  dateText: {
-    fontSize: 10,
-    marginTop: 2,
+    textAlign: 'center',
   },
   summary: {
     borderTopWidth: 1,
@@ -327,6 +352,7 @@ const styles = StyleSheet.create({
   loadingContainer: {
     padding: 40,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   loadingText: {
     fontSize: 14,
@@ -334,6 +360,7 @@ const styles = StyleSheet.create({
   emptyContainer: {
     padding: 40,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyText: {
     fontSize: 14,
